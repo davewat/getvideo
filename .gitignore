@@ -2,3 +2,6 @@
 /dist/
 PLAN.md
 CLAUDE.md
+/mac/.build/
+/mac/.build-*/
+/mac/.swiftpm/

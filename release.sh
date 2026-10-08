@@ -1,6 +1,6 @@
 #!/bin/sh
 # Cuts a release: tags the current commit, builds the universal binary and
-# publishes it as a GitHub release.
+# the Mac app (mac/build.sh), and publishes both as a GitHub release.
 #
 #   ./release.sh v0.1.0
 set -eu
@@ -21,15 +21,20 @@ fi
 echo "==> pushing $(git rev-parse --abbrev-ref HEAD)"
 git push origin HEAD
 
-# Tag before building: build.sh stamps the binary from git describe.
+# Tag before building: both build scripts stamp from git describe.
 echo "==> tagging $VERSION"
 git tag -a "$VERSION" -m "GetVideo $VERSION"
 ./build.sh
+./mac/build.sh
 
 ZIP="dist/getvideo-$VERSION-macos-universal.zip"
 rm -f "$ZIP"
 ditto -c -k --keepParent dist/getvideo "$ZIP"
 
+APPZIP="dist/GetVideo-$VERSION-macos.zip"
+rm -f "$APPZIP"
+ditto -c -k --sequesterRsrc --keepParent dist/GetVideo.app "$APPZIP"
+
 echo "==> publishing"
 git push origin "$VERSION"
-gh release create "$VERSION" "$ZIP" --title "GetVideo $VERSION" --generate-notes
+gh release create "$VERSION" "$ZIP" "$APPZIP" --title "GetVideo $VERSION" --generate-notes

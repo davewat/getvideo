@@ -1,40 +1,101 @@
 # GetVideo
 
-Single-binary macOS service: paste a YouTube link, download it with yt-dlp, transcode it with
-HandBrakeCLI, and save it to a folder you choose. The UI is a web page served on `127.0.0.1:8765`.
+**Website: https://davewat.github.io/getvideo/**
 
+Paste a link. Get a file.
 
-For educational use only. It was made for teachers who need to show short educational videos in
-class without relying on the classroom's internet connection, and without the adverts.
+GetVideo is a free Mac app for teachers. It saves an educational video to your computer, so you
+can show it in class without the internet and without the adverts.
 
-## Built on
+For educational use only. Save only videos you have the right to keep and show, and follow the
+terms of the site they come from.
 
-GetVideo is a thin layer over the work of others: [yt-dlp](https://github.com/yt-dlp/yt-dlp) does
-every download, [HandBrake](https://handbrake.fr) does every conversion, and both rely on
-[FFmpeg](https://ffmpeg.org). GetVideo is not affiliated with or endorsed by any of them.
+## Why I made this
 
-Site: https://davewat.github.io/getvideo/ (the `web` branch).
+I made GetVideo for the teachers in my life. They find short, educational videos online that are
+exactly right for a lesson. Then the classroom has no internet that day, or the video opens with a
+run of commercials in front of thirty children. GetVideo lets them save the video at home the
+night before and play it from their own computer.
 
-## Build and run
+Dave
+
+## How it works
+
+Every video runs the same three stages:
+
+1. **Download.** yt-dlp fetches the video and audio, up to the quality you set.
+2. **Convert.** HandBrake re-encodes it with a preset so it plays anywhere and takes less space.
+3. **Save.** The finished file moves to your folder, named after the video.
+
+**Easy mode** is the default: paste a link and press **Get video**. It uses sensible settings
+(up to 1080p, HandBrake's Fast 1080p30 preset, an mp4 in your Downloads folder).
+
+**Advanced mode** shows every download and conversion option. Press **Save as default** and Easy
+mode uses your settings from then on.
+
+On first start GetVideo downloads the tools it needs (yt-dlp, HandBrakeCLI and ffmpeg) into its
+own folder and keeps them up to date. It runs entirely on your Mac: no account, no upload, no
+tracking.
+
+## Install
+
+Download from the [releases page](https://github.com/davewat/getvideo/releases/latest). Neither
+download is notarized by Apple yet, so macOS blocks it until you clear the download flag in
+Terminal, as shown below.
+
+**The Mac app (recommended).** Download `GetVideo-…-macos.zip` and unzip it. Then:
+
+    xattr -dr com.apple.quarantine ~/Downloads/GetVideo.app
+
+Double-click GetVideo. The first start takes about a minute while the tools install. Needs
+macOS 14 or later.
+
+**The browser version.** Download `getvideo-…-macos-universal.zip` and unzip it. Then:
+
+    xattr -d com.apple.quarantine ~/Downloads/getvideo
+    ~/Downloads/getvideo
+
+Your browser opens the app. Keep the Terminal window open while you use it.
+
+## On the shoulders of giants
+
+GetVideo is a thin layer. The hard work is done by open-source projects that volunteers have built
+and maintained for years. If GetVideo is useful to you, the thanks belong to them.
+
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) does every download.
+- [HandBrake](https://handbrake.fr) does every conversion.
+- [FFmpeg](https://ffmpeg.org) joins video and audio, and both of the above rely on it.
+
+GetVideo is an independent project and is not affiliated with or endorsed by any of them, or by
+YouTube.
+
+## For developers
+
+Go is the only requirement; the web UI in `web/` is plain HTML, CSS and JavaScript embedded in
+the binary.
 
     ./build.sh            # dist/getvideo, universal (Apple Silicon + Intel)
     ./build.sh native     # this machine's architecture only
-    ./dist/getvideo       # opens the browser
+    ./release.sh v1.2.3   # tag, build and publish a GitHub release
 
 Flags: `-port 8765`, `-no-open`, `-data <dir>` (default `~/Library/Application Support/GetVideo`).
-After editing anything in `web/`, rebuild: the files are embedded in the binary.
 
-## Easy and Advanced mode
+- `tools.go` installs and updates yt-dlp, HandBrakeCLI and ffmpeg.
+- `jobs.go` is the queue: download, convert, save, with progress over server-sent events.
+- `options.go` turns the form's options into command-line arguments.
+- `server.go` is the HTTP API. It listens on localhost only.
+- `web/js/schema.js` defines the form fields and defaults; add an option there.
+- The website lives on the `web` branch.
 
-The page opens in Easy mode: it installs or updates yt-dlp, HandBrakeCLI and ffmpeg on start
-(showing an "Updating app" notice), and offers only a paste box. Advanced mode shows every
-option; "Save as default" stores them in `settings.json` in the data directory, and Easy mode
-runs with those saved defaults.
+### Native Mac app
 
-## Layout
-- `tools.go` installs/updates yt-dlp (checksum-verified), HandBrakeCLI (from the .dmg), ffmpeg (static build).
-- `jobs.go` the queue: download -> transcode -> move; progress over SSE (`/api/events`); `jobs.json` history.
-- `options.go` curated option structs -> CLI args, plus an "extra arguments" escape hatch.
-- `server.go` HTTP API; binds localhost only, checks Host, requires `X-GetVideo: 1` on writes.
-- `web/` the page: `index.html`, `style.css`, `js/app.js` (UI), `js/schema.js` (form fields and
-  defaults; add an option here), `js/api.js`, `js/dom.js`.
+`mac/` holds a native SwiftUI version that works the same way, with no browser or Terminal. It
+needs Xcode and macOS 14 or later.
+
+    ./mac/build.sh          # dist/GetVideo.app, universal
+    ./mac/build.sh native   # this machine's architecture only
+
+It shares the tools folder with the Go version and keeps its own settings and history. For
+testing, `GETVIDEO_DATA=/some/folder` points it at a different data folder.
+
+MIT licence.
