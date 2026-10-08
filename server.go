@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -138,17 +137,16 @@ func (s *server) handler() http.Handler {
 			httpErr(w, 404, err)
 			return
 		}
-		_ = exec.Command("open", "-R", b.Path).Start()
+		_ = revealFile(b.Path)
 		writeJSON(w, 200, map[string]bool{"ok": true})
 	})
 	mux.HandleFunc("POST /api/pick-folder", func(w http.ResponseWriter, r *http.Request) {
-		out, err := exec.CommandContext(r.Context(), "osascript", "-e",
-			`POSIX path of (choose folder with prompt "Choose where to save the video")`).Output()
-		if err != nil { // the user cancelled the dialog
-			writeJSON(w, 200, map[string]string{"path": ""})
+		path, err := pickFolder(r.Context())
+		if err != nil { // no chooser on this system: the page asks the user to type the path
+			writeJSON(w, 200, map[string]string{"path": "", "message": err.Error()})
 			return
 		}
-		writeJSON(w, 200, map[string]string{"path": strings.TrimRight(strings.TrimSpace(string(out)), "/")})
+		writeJSON(w, 200, map[string]string{"path": path})
 	})
 	mux.HandleFunc("GET /api/events", s.events)
 	mux.Handle("/", spa(s.web))

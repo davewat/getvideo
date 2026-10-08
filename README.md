@@ -65,6 +65,27 @@ unzip it, then in Terminal:
 
 Keep the Terminal window open while you use it.
 
+## Windows and Ubuntu (untested)
+
+GetVideo is made for the Mac, and the Mac is the only place it has been tested. The browser
+version is also built for Windows and Ubuntu, for anyone who wants to try it. These builds have
+never been run on a real machine, so expect rough edges, and please
+[report what you find](https://github.com/davewat/getvideo/issues). Both are for 64-bit Intel or
+AMD computers.
+
+**Windows Go version.** [Download it](https://github.com/davewat/getvideo/releases/latest/download/getvideo-windows-go.zip),
+unzip it and double-click `getvideo.exe`. If Windows shows "Windows protected your PC", click
+**More info**, then **Run anyway**. Your browser opens the app; keep the black window open while
+you use it.
+
+**Ubuntu Go version.** HandBrake has to be installed first, because GetVideo cannot install it on
+Linux. [Download GetVideo](https://github.com/davewat/getvideo/releases/latest/download/getvideo-ubuntu-go.tar.gz),
+then in a terminal:
+
+    sudo apt install handbrake-cli
+    tar -xzf ~/Downloads/getvideo-ubuntu-go.tar.gz
+    ./getvideo
+
 ## On the shoulders of giants
 
 GetVideo is a thin layer. The hard work is done by open-source projects that volunteers have built
@@ -82,13 +103,17 @@ YouTube.
 Go is the only requirement; the web UI in `web/` is plain HTML, CSS and JavaScript embedded in
 the binary.
 
-    ./build.sh            # dist/getvideo, universal (Apple Silicon + Intel)
-    ./build.sh native     # this machine's architecture only
+    ./build.sh            # every platform: dist/getvideo (macOS universal),
+                          # dist/windows/getvideo.exe, dist/ubuntu/getvideo
+    ./build.sh native     # this machine only
     ./release.sh v1.2.3   # tag, build and publish a GitHub release
 
-Flags: `-port 8765`, `-no-open`, `-data <dir>` (default `~/Library/Application Support/GetVideo`).
+Flags: `-port 8765`, `-no-open`, `-data <dir>` (default `~/Library/Application Support/GetVideo`
+on macOS, `%AppData%\GetVideo` on Windows, `~/.local/share/getvideo` on Linux).
 
 - `tools.go` installs and updates yt-dlp, HandBrakeCLI and ffmpeg.
+- `platform_darwin.go`, `platform_windows.go` and `platform_linux.go` hold what differs per
+  system: where each tool comes from, opening the browser, the folder chooser.
 - `jobs.go` is the queue: download, convert, save, with progress over server-sent events.
 - `options.go` turns the form's options into command-line arguments.
 - `server.go` is the HTTP API. It listens on localhost only.

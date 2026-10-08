@@ -400,7 +400,8 @@ func (q *queue) pipeline(ctx context.Context, j *Job, work string) error {
 	return nil
 }
 
-var unsafeName = regexp.MustCompile(`[/:\x00-\x1f]`)
+// unsafeName covers what macOS, Linux and Windows each refuse in a file name.
+var unsafeName = regexp.MustCompile(`[/\\:*?"<>|\x00-\x1f]`)
 
 func sanitize(s string) string {
 	s = strings.TrimSpace(unsafeName.ReplaceAllString(s, "-"))
@@ -462,7 +463,7 @@ func scanLines(r io.Reader, f func(string)) {
 // runCmd runs a process, feeding merged stdout+stderr lines to onLine.
 func runCmd(ctx context.Context, bin string, args []string, onLine func(string)) error {
 	cmd := exec.CommandContext(ctx, bin, args...)
-	cmd.Cancel = func() error { return cmd.Process.Signal(os.Interrupt) }
+	cmd.Cancel = func() error { return interrupt(cmd.Process) }
 	cmd.WaitDelay = 5 * time.Second
 	pr, pw := io.Pipe()
 	cmd.Stdout, cmd.Stderr = pw, pw

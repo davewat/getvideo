@@ -15,7 +15,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -62,19 +61,40 @@ func newTools(dir string) (*tools, error) {
 	}, nil
 }
 
-func (t *tools) path(name string) string { return filepath.Join(t.dir, name) }
+// path is where a tool's executable lives: in our own bin folder, or wherever the system has it
+// for a tool this platform does not manage (see isSystemTool).
+func (t *tools) path(name string) string {
+	if isSystemTool(name) {
+		p, _ := exec.LookPath(name)
+		return p
+	}
+	return filepath.Join(t.dir, name+exeSuffix)
+}
 
 func (t *tools) installed(name string) bool {
-	st, err := os.Stat(t.path(name))
+	p := t.path(name)
+	if p == "" {
+		return false
+	}
+	st, err := os.Stat(p)
 	return err == nil && !st.IsDir()
 }
 
-func (t *tools) versionFile(name string) string { return t.path(name) + ".version" }
+func (t *tools) versionFile(name string) string { return filepath.Join(t.dir, name+".version") }
 
-// version is the version recorded at install time, falling back to asking the binary.
+var handbrakeVersionRe = regexp.MustCompile(`HandBrake (\d[^\s]*)`)
+
+// version is the version recorded at install time; a system tool is asked directly.
 func (t *tools) version(name string) string {
 	if !t.installed(name) {
 		return ""
+	}
+	if isSystemTool(name) {
+		out, _ := exec.Command(t.path(name), "--version").CombinedOutput()
+		if m := handbrakeVersionRe.FindSubmatch(out); m != nil {
+			return string(m[1])
+		}
+		return "installed"
 	}
 	if b, err := os.ReadFile(t.versionFile(name)); err == nil {
 		return strings.TrimSpace(string(b))
@@ -90,7 +110,10 @@ func (t *tools) status(ctx context.Context, checkLatest bool) []ToolStatus {
 		t.mu.Lock()
 		s.Busy, s.Error = t.busy[n], t.errs[n]
 		t.mu.Unlock()
-		if checkLatest {
+		if isSystemTool(n) && !s.Installed && s.Error == "" {
+			s.Error = systemToolHint(n)
+		}
+		if checkLatest && !isSystemTool(n) {
 			if v, err := t.latest(ctx, n); err == nil {
 				s.Latest = v
 				s.Update = s.Installed && v != s.Version
@@ -104,8 +127,9 @@ func (t *tools) status(ctx context.Context, checkLatest bool) []ToolStatus {
 type ghRelease struct {
 	Tag    string `json:"tag_name"`
 	Assets []struct {
-		Name string `json:"name"`
-		URL  string `json:"browser_download_url"`
+		Name    string `json:"name"`
+		URL     string `json:"browser_download_url"`
+		Updated string `json:"updated_at"`
 	} `json:"assets"`
 }
 
@@ -132,15 +156,6 @@ func (t *tools) release(ctx context.Context, repo string) (*ghRelease, error) {
 	return &r, nil
 }
 
-// ffmpegURL is Martin Riedl's static macOS build server; it serves arm64 and amd64.
-func ffmpegURL() string {
-	arch := "arm64"
-	if runtime.GOARCH == "amd64" {
-		arch = "amd64"
-	}
-	return "https://ffmpeg.martin-riedl.de/redirect/latest/macos/" + arch + "/release/ffmpeg.zip"
-}
-
 func (t *tools) latest(ctx context.Context, name string) (string, error) {
 	switch name {
 	case toolYtdlp:
@@ -156,21 +171,7 @@ func (t *tools) latest(ctx context.Context, name string) (string, error) {
 		}
 		return r.Tag, nil
 	case toolFfmpeg:
-		// The redirect target embeds the version: /download/macos/arm64/<build>_<version>/ffmpeg.zip
-		req, _ := http.NewRequestWithContext(ctx, "GET", ffmpegURL(), nil)
-		c := *t.http
-		c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-		resp, err := c.Do(req)
-		if err != nil {
-			return "", err
-		}
-		resp.Body.Close()
-		loc := resp.Header.Get("Location")
-		parts := strings.Split(loc, "/")
-		if len(parts) < 2 {
-			return "", errors.New("unexpected ffmpeg redirect")
-		}
-		return parts[len(parts)-2], nil
+		return t.ffmpegLatest(ctx)
 	}
 	return "", errors.New("unknown tool")
 }
@@ -187,6 +188,16 @@ func (t *tools) install(ctx context.Context, name string) error {
 	defer func() { t.mu.Lock(); t.busy[name] = false; t.mu.Unlock() }()
 
 	var err error
+	if isSystemTool(name) {
+		// Not ours to install: say how, and report success once the user has done it.
+		if !t.installed(name) {
+			err = errors.New(systemToolHint(name))
+			t.mu.Lock()
+			t.errs[name] = err.Error()
+			t.mu.Unlock()
+		}
+		return err
+	}
 	switch name {
 	case toolYtdlp:
 		err = t.installYtdlp(ctx)
@@ -243,9 +254,10 @@ func (t *tools) place(name, src, version string) error {
 	if err := os.Chmod(src, 0o755); err != nil {
 		return err
 	}
-	// Downloaded executables can carry a quarantine flag that blocks launching them.
-	_ = exec.Command("xattr", "-d", "com.apple.quarantine", src).Run()
-	if err := os.Rename(src, t.path(name)); err != nil {
+	prepareExecutable(src)
+	dst := t.path(name)
+	_ = os.Remove(dst) // Windows cannot rename over an existing file
+	if err := os.Rename(src, dst); err != nil {
 		return err
 	}
 	return os.WriteFile(t.versionFile(name), []byte(version+"\n"), 0o644)
@@ -259,27 +271,27 @@ func (t *tools) installYtdlp(ctx context.Context) error {
 	var binURL, sumsURL string
 	for _, a := range r.Assets {
 		switch a.Name {
-		case "yt-dlp_macos":
+		case ytdlpAsset():
 			binURL = a.URL
 		case "SHA2-256SUMS":
 			sumsURL = a.URL
 		}
 	}
 	if binURL == "" {
-		return errors.New("no yt-dlp_macos asset in the latest release")
+		return fmt.Errorf("no %s asset in the latest release", ytdlpAsset())
 	}
-	tmp := t.path(".yt-dlp.download")
+	tmp := filepath.Join(t.dir, ".yt-dlp.download")
 	defer os.Remove(tmp)
 	if err := t.download(ctx, binURL, tmp); err != nil {
 		return err
 	}
 	if sumsURL != "" {
-		sums := t.path(".yt-dlp.sums")
+		sums := filepath.Join(t.dir, ".yt-dlp.sums")
 		defer os.Remove(sums)
 		if err := t.download(ctx, sumsURL, sums); err != nil {
 			return err
 		}
-		want := checksumFor(sums, "yt-dlp_macos")
+		want := checksumFor(sums, ytdlpAsset())
 		got, err := sha256File(tmp)
 		if err != nil {
 			return err
@@ -307,92 +319,34 @@ func checksumFor(sumsFile, asset string) string {
 	return ""
 }
 
-func (t *tools) installHandbrake(ctx context.Context) error {
-	r, err := t.release(ctx, "HandBrake/HandBrake")
-	if err != nil {
-		return err
-	}
-	var dmgURL string
-	for _, a := range r.Assets {
-		if strings.HasPrefix(a.Name, "HandBrakeCLI-") && strings.HasSuffix(a.Name, ".dmg") {
-			dmgURL = a.URL
-		}
-	}
-	if dmgURL == "" {
-		return errors.New("no HandBrakeCLI .dmg asset in the latest release")
-	}
-	work, err := os.MkdirTemp(t.dir, ".hb-")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(work)
-	dmg := filepath.Join(work, "hb.dmg")
-	if err := t.download(ctx, dmgURL, dmg); err != nil {
-		return err
-	}
-	mnt := filepath.Join(work, "mnt")
-	if err := os.Mkdir(mnt, 0o755); err != nil {
-		return err
-	}
-	if out, err := exec.CommandContext(ctx, "hdiutil", "attach", "-nobrowse", "-readonly", "-noverify", "-mountpoint", mnt, dmg).CombinedOutput(); err != nil {
-		return fmt.Errorf("hdiutil attach: %v: %s", err, out)
-	}
-	defer exec.Command("hdiutil", "detach", "-force", mnt).Run()
-	src := filepath.Join(mnt, "HandBrakeCLI")
-	if _, err := os.Stat(src); err != nil {
-		return errors.New("HandBrakeCLI not found inside the disk image")
-	}
-	tmp := t.path(".hb.download")
-	defer os.Remove(tmp)
-	if err := copyFile(src, tmp); err != nil {
-		return err
-	}
-	return t.place(toolHandbrake, tmp, r.Tag)
-}
-
-func (t *tools) installFfmpeg(ctx context.Context) error {
-	ver, err := t.latest(ctx, toolFfmpeg)
-	if err != nil {
-		return err
-	}
-	work, err := os.MkdirTemp(t.dir, ".ff-")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(work)
-	zp := filepath.Join(work, "ffmpeg.zip")
-	if err := t.download(ctx, ffmpegURL(), zp); err != nil {
-		return err
-	}
-	zr, err := zip.OpenReader(zp)
+// extractFromZip copies the first file named base out of a zip archive, wherever it sits inside.
+func extractFromZip(zipPath, base, dst string) error {
+	zr, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return err
 	}
 	defer zr.Close()
-	tmp := t.path(".ffmpeg.download")
-	defer os.Remove(tmp)
 	for _, f := range zr.File {
-		if filepath.Base(f.Name) != "ffmpeg" || f.FileInfo().IsDir() {
+		if filepath.Base(f.Name) != base || f.FileInfo().IsDir() {
 			continue
 		}
 		rc, err := f.Open()
 		if err != nil {
 			return err
 		}
-		out, err := os.Create(tmp)
+		out, err := os.Create(dst)
 		if err != nil {
 			rc.Close()
 			return err
 		}
 		_, err = io.Copy(out, rc)
 		rc.Close()
-		out.Close()
-		if err != nil {
-			return err
+		if cerr := out.Close(); err == nil {
+			err = cerr
 		}
-		return t.place(toolFfmpeg, tmp, ver)
+		return err
 	}
-	return errors.New("ffmpeg binary not found in archive")
+	return fmt.Errorf("%s not found in the archive", base)
 }
 
 func copyFile(src, dst string) error {

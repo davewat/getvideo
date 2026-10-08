@@ -32,6 +32,15 @@ ZIP="dist/getvideo-mac-go.zip"
 rm -f "$ZIP"
 ditto -c -k --keepParent dist/getvideo "$ZIP"
 
+WINZIP="dist/getvideo-windows-go.zip"
+rm -f "$WINZIP"
+(cd dist/windows && zip -q -X "../getvideo-windows-go.zip" getvideo.exe)
+
+# tar.gz keeps the executable bit; COPYFILE_DISABLE keeps macOS metadata out of it.
+LINUXTAR="dist/getvideo-ubuntu-go.tar.gz"
+rm -f "$LINUXTAR"
+COPYFILE_DISABLE=1 tar -czf "$LINUXTAR" -C dist/ubuntu getvideo
+
 APPZIP="dist/GetVideo-mac-native.zip"
 rm -f "$APPZIP"
 ditto -c -k --sequesterRsrc --keepParent dist/GetVideo.app "$APPZIP"
@@ -39,4 +48,5 @@ ditto -c -k --sequesterRsrc --keepParent dist/GetVideo.app "$APPZIP"
 echo "==> publishing"
 git push origin "$VERSION"
 # The text after # is the name shown on the release page.
-gh release create "$VERSION" "$APPZIP#Mac Native (preferred)" "$ZIP#Mac Go version" --title "GetVideo $VERSION" --generate-notes
+gh release create "$VERSION" "$APPZIP#Mac Native (preferred)" "$ZIP#Mac Go version" \
+	"$WINZIP#Windows Go version (untested)" "$LINUXTAR#Ubuntu Go version (untested)" --title "GetVideo $VERSION" --generate-notes

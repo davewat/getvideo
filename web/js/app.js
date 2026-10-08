@@ -101,8 +101,9 @@ function field(section, f) {
         oninput: (e) => set(e.target.value) })
       wrap = h('label', { class: 'field' }, h('span', {}, f.label), h('div', { class: 'inline' }, input,
         h('button', { type: 'button', class: 'btn', onclick: async () => {
-          const { path } = await api.pickFolder()
+          const { path, message } = await api.pickFolder()
           if (path) { input.value = path; set(path) }
+          else if (message) alert(message)
         } }, 'Choose folder')))
       break
     default: // text, number
@@ -314,6 +315,7 @@ function renderNotice() {
 // ---- jobs -----------------------------------------------------------------
 
 const rows = new Map() // job id -> { el, update, job }
+const REVEAL = /Mac/.test(navigator.platform) ? 'Show in Finder' : /Win/.test(navigator.platform) ? 'Show in Explorer' : 'Show in folder'
 const STAGES = ['downloading', 'transcoding', 'moving']
 const LABEL = { queued: 'Waiting', downloading: 'Downloading', transcoding: 'Converting', moving: 'Saving', done: 'Done', failed: 'Failed', canceled: 'Canceled' }
 const isActive = (s) => s === 'queued' || STAGES.includes(s)
@@ -363,7 +365,7 @@ function makeRow(job) {
         const cut = o.lastIndexOf('/') + 1
         return h('div', { class: 'output' },
           h('div', { class: 'path', title: o }, h('b', {}, o.slice(cut)), h('span', {}, o.slice(0, cut))),
-          h('button', { class: 'btn small', type: 'button', onclick: () => api.reveal(o) }, 'Show in Finder'))
+          h('button', { class: 'btn small', type: 'button', onclick: () => api.reveal(o) }, REVEAL))
       }))
     }
 

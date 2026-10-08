@@ -50,6 +50,10 @@ func TestSanitize(t *testing.T) {
 	if got := sanitize("../a/b: c"); got != "..-a-b- c" && got != "-a-b- c" {
 		t.Fatalf("got %q", got)
 	}
+	// Characters Windows refuses in a file name are replaced on every platform.
+	if got := sanitize(`What? "A" <b>|c*`); got != "What- -A- -b--c-" {
+		t.Fatalf("got %q", got)
+	}
 	if sanitize("") != "video" {
 		t.Fatal("empty name must fall back")
 	}

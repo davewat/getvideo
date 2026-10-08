@@ -1,4 +1,4 @@
-// getvideo: a single-binary macOS service. It installs and updates yt-dlp,
+// getvideo: a single-binary service for macOS, Windows and Linux. It installs and updates yt-dlp,
 // HandBrakeCLI and ffmpeg, then runs download -> transcode -> move jobs,
 // driven from a React page served on localhost.
 package main
@@ -13,7 +13,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"time"
@@ -28,16 +27,15 @@ var version = "dev"
 func main() {
 	port := flag.Int("port", 8765, "localhost port")
 	noOpen := flag.Bool("no-open", false, "do not open the browser on start")
-	dataDir := flag.String("data", "", "data directory (default ~/Library/Application Support/GetVideo)")
+	dataDir := flag.String("data", "", "data directory (default: the platform's application-data folder)")
 	flag.Parse()
 
 	dir := *dataDir
 	if dir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
+		var err error
+		if dir, err = defaultDataDir(); err != nil {
 			log.Fatal(err)
 		}
-		dir = filepath.Join(home, "Library", "Application Support", "GetVideo")
 	}
 	tools, err := newTools(filepath.Join(dir, "bin"))
 	if err != nil {
@@ -58,7 +56,7 @@ func main() {
 	url := fmt.Sprintf("http://127.0.0.1:%d", *port)
 	log.Printf("getvideo %s listening on %s (data: %s)", version, url, dir)
 	if !*noOpen {
-		_ = exec.Command("open", url).Start()
+		openBrowser(url)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
