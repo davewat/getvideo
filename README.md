@@ -49,10 +49,11 @@ You only do this once.
    app. Click **Done** (on older versions of macOS the button is **Cancel** or **OK**). Do not
    click Move to Trash.
 4. **Allow it.** Click the Apple menu, then **System Settings**, then **Privacy & Security**.
-   Scroll down to **Security**. Next to "GetVideo was blocked", click **Open Anyway**, enter your
-   password or use Touch ID, then click **Open**.
+   Scroll down to **Security**. Next to "GetVideo was blocked", click **Open Anyway**.
+5. **Enter your password.** macOS asks for your Mac password (or Touch ID) to confirm.
+6. **Open GetVideo again.** Double-click it in Applications once more, and it opens.
 
-GetVideo opens, and from now on it opens like any other app. The first start takes about a minute
+From now on it opens like any other app. The first start takes about a minute
 while it installs its tools. It needs macOS 14 or later.
 
 **Prefer the browser version?** The Mac Go version runs in your browser instead.
