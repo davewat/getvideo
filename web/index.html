@@ -9,18 +9,35 @@
 </head>
 <body>
   <header class="top">
-    <div class="brand"><span class="logo">▶</span><h1>GetVideo</h1></div>
-    <div id="tools" class="tools"></div>
-    <button id="mode" class="btn small" type="button"></button>
+    <div class="brand">
+      <span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+      <h1>GetVideo</h1>
+    </div>
+    <div class="seg" role="group" aria-label="View">
+      <button type="button" data-mode="easy">Easy</button>
+      <button type="button" data-mode="advanced">Advanced</button>
+    </div>
   </header>
-  <div id="notice" class="notice" hidden></div>
+  <div id="notice" class="notice" role="status" hidden></div>
   <main>
     <form id="form" class="panel"></form>
-    <section class="panel queue">
-      <h2>Queue</h2>
-      <div id="jobs"></div>
-      <p id="empty" class="muted">Nothing queued yet. Paste a link to get started.</p>
-    </section>
+    <aside>
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Queue</h2>
+          <button id="clear" class="link" type="button" hidden>Clear finished</button>
+        </div>
+        <div id="jobs"></div>
+        <p id="empty" class="empty">No videos yet. Paste a link and it shows up here.</p>
+      </section>
+      <section class="panel adv-only">
+        <div class="panel-head">
+          <h2>Tools</h2>
+          <button id="check" class="link" type="button">Check for updates</button>
+        </div>
+        <div id="tools"></div>
+      </section>
+    </aside>
   </main>
 </body>
 </html>

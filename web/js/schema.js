@@ -35,7 +35,7 @@ export const sections = [
       { key: 'subtitles', label: 'Download subtitles', type: 'check' },
       { key: 'autoSubs', label: 'Include auto-generated subtitles', type: 'check' },
       { key: 'embedSubs', label: 'Embed subtitles', type: 'check', off: (f) => !f.download.subtitles && !f.download.autoSubs },
-      { key: 'subLangs', label: 'Subtitle languages', type: 'text', placeholder: 'en,es or all', off: (f) => !f.download.subtitles && !f.download.autoSubs },
+      { key: 'subLangs', label: 'Subtitle languages', type: 'text', placeholder: 'en,es or all', show: (f) => f.download.subtitles || f.download.autoSubs },
       { key: 'sponsorBlock', label: 'Remove SponsorBlock segments', type: 'chips', wide: true,
         options: ['sponsor', 'intro', 'outro', 'selfpromo', 'interaction', 'preview', 'filler'] },
       { key: 'cookiesBrowser', label: 'Cookies from browser', type: 'select', advanced: true,
@@ -48,8 +48,8 @@ export const sections = [
     ],
   },
   {
-    key: 'transcode', title: 'Transcode', tool: 'HandBrake', fields: [
-      { key: 'skip', label: 'Skip transcoding (keep the download as-is)', type: 'check', wide: true, off: audioOnly },
+    key: 'transcode', title: 'Convert', tool: 'HandBrake', fields: [
+      { key: 'skip', label: 'Skip converting (keep the download as it is)', type: 'check', wide: true, off: audioOnly },
       { key: 'preset', label: 'Preset', type: 'preset', off: noTranscode },
       { key: 'container', label: 'Container', type: 'select', off: noTranscode, options: same(['mp4', 'mkv', 'webm']) },
       { key: 'encoder', label: 'Video encoder', type: 'select', off: noTranscode,
@@ -80,10 +80,10 @@ export const sections = [
     ],
   },
   {
-    key: 'output', title: 'Save to', tool: 'your Mac', fields: [
+    key: 'output', title: 'Save', tool: 'on this Mac', fields: [
       { key: 'dir', label: 'Folder', type: 'folder', placeholder: 'Defaults to ~/Downloads', wide: true },
       { key: 'filename', label: 'File name (no extension; blank = video title)', type: 'text', wide: true, transient: true },
-      { key: 'keepSource', label: 'Also keep the untranscoded download', type: 'check' },
+      { key: 'keepSource', label: 'Also keep the original download', type: 'check' },
       { key: 'overwrite', label: 'Overwrite an existing file', type: 'check' },
     ],
   },

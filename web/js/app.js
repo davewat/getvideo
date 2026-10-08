@@ -32,8 +32,7 @@ function setMode(m) {
   mode = m
   try { localStorage.setItem(MODE, m) } catch { /* storage unavailable */ }
   document.body.dataset.mode = m
-  $('#mode').textContent = m === 'easy' ? 'Advanced' : 'Easy mode'
-  $('#mode').title = m === 'easy' ? 'Show every download and transcode option' : 'Back to the simple view'
+  document.querySelectorAll('.seg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)))
   changed()
   renderNotice()
 }
@@ -98,22 +97,23 @@ function field(section, f) {
       break
     }
     case 'folder':
-      input = h('input', { type: 'text', value: state[f.key], placeholder: f.placeholder, spellcheck: false,
+      input = h('input', { type: 'text', value: state[f.key], placeholder: f.placeholder,
         oninput: (e) => set(e.target.value) })
       wrap = h('label', { class: 'field' }, h('span', {}, f.label), h('div', { class: 'inline' }, input,
         h('button', { type: 'button', class: 'btn', onclick: async () => {
           const { path } = await api.pickFolder()
           if (path) { input.value = path; set(path) }
-        } }, 'Choose…')))
+        } }, 'Choose folder')))
       break
     default: // text, number
       input = h('input', { type: f.type === 'number' ? 'number' : 'text', min: f.type === 'number' ? 0 : null,
-        value: state[f.key], placeholder: f.placeholder, spellcheck: false,
+        value: state[f.key], placeholder: f.placeholder,
         oninput: (e) => set(f.type === 'number' ? Number(e.target.value) || 0 : e.target.value) })
       wrap = h('label', { class: 'field' }, h('span', {}, f.label), input)
   }
+  input?.setAttribute('spellcheck', 'false')
 
-  if (f.wide) wrap.classList.add('wide')
+  if (f.wide || f.type === 'chips') wrap.classList.add('wide')
   syncers.push(() => {
     const off = f.off?.(form) ?? false
     wrap.classList.toggle('off', off)
@@ -123,40 +123,53 @@ function field(section, f) {
   return wrap
 }
 
-// describe sums up the saved defaults in one line for Easy mode.
-function describe(v) {
+// group lays a section's fields out as: full-width switches, then inputs, then the remaining switches.
+function group(section, fields) {
+  const is = (f, check, wide) => (f.type === 'check') === check && (wide === undefined || !!f.wide === wide)
+  const lead = fields.filter((f) => is(f, true, true)).map((f) => field(section, f))
+  const inputs = fields.filter((f) => is(f, false)).map((f) => field(section, f))
+  const toggles = fields.filter((f) => is(f, true, false)).map((f) => field(section, f))
+  return [
+    ...lead,
+    inputs.length ? h('div', { class: 'grid' }, inputs) : null,
+    toggles.length ? h('div', { class: 'grid toggles' }, toggles) : null,
+  ]
+}
+
+// plan describes what a set of options will do, one phrase per stage.
+function plan(v) {
   const d = v.download
   const t = v.transcode
-  const parts = [d.audioOnly ? `Audio only (${d.audioFormat})` : d.maxHeight ? `Up to ${d.maxHeight}p` : 'Best quality']
-  if (!d.audioOnly) parts.push(t.skip ? 'no transcoding' : [t.preset || 'HandBrake', t.container].filter(Boolean).join(' · '))
-  parts.push(`saved to ${v.output.dir || '~/Downloads'}`)
-  return parts.join(' → ')
+  const converts = !d.audioOnly && !t.skip
+  return [
+    { stage: 'download', label: 'Download', text: d.audioOnly ? `audio only, ${d.audioFormat}` : d.maxHeight ? `up to ${d.maxHeight}p` : 'best quality' },
+    converts && { stage: 'transcode', label: 'Convert', text: [t.preset || 'custom settings', t.container].filter(Boolean).join(', ') },
+    { stage: 'output', label: 'Save', text: v.output.dir || '~/Downloads' },
+  ].filter(Boolean)
 }
 
 let submitBtn = null
 
 function buildForm() {
-  const url = h('textarea', { rows: 2, placeholder: 'Paste one or more YouTube links…', required: true })
-  const error = h('p', { class: 'error', hidden: true })
+  const url = h('textarea', { rows: 2, placeholder: 'https://www.youtube.com/watch?v=…', required: true, id: 'url' })
+  url.setAttribute('spellcheck', 'false')
+  const error = h('p', { class: 'error', role: 'alert', hidden: true })
   submitBtn = h('button', { class: 'btn primary', type: 'submit' }, 'Get video')
 
-  const steps = sections.map((s, i) => {
-    const basic = s.fields.filter((f) => !f.advanced).map((f) => field(s, f))
-    const adv = s.fields.filter((f) => f.advanced).map((f) => field(s, f))
-    return h('details', { class: 'step', open: true },
-      h('summary', {}, h('span', { class: 'num' }, String(i + 1)), h('span', { class: 'step-title' }, s.title),
-        h('span', { class: 'muted' }, s.tool)),
-      h('div', { class: 'grid' }, basic),
-      adv.length ? h('details', { class: 'more' }, h('summary', {}, 'More options'), h('div', { class: 'grid' }, adv)) : null)
-  })
+  const steps = sections.map((s) => h('section', { class: 'step', 'data-stage': s.key },
+    h('h3', {}, h('span', { class: 'swatch' }), s.title, h('span', { class: 'tool-name' }, s.tool)),
+    group(s, s.fields.filter((f) => !f.advanced)),
+    s.fields.some((f) => f.advanced)
+      ? h('details', { class: 'more' }, h('summary', {}, 'More options'), group(s, s.fields.filter((f) => f.advanced)))
+      : null))
 
-  // Easy mode: one line saying what will happen, and the way into Advanced.
-  const summary = h('span', {})
-  const easy = h('p', { class: 'easy-only summary muted' }, summary, ' ',
-    h('button', { class: 'link', type: 'button', onclick: () => setMode('advanced') }, 'Change'))
+  // Easy mode: what will happen, one phrase per stage, and the way into Advanced.
+  const planEl = h('div', { class: 'plan' })
+  const easy = h('div', { class: 'easy-only plan-row' }, planEl,
+    h('button', { class: 'link', type: 'button', onclick: () => setMode('advanced') }, 'Change settings'))
 
   // Advanced mode: every option, plus saving them as the defaults Easy mode uses.
-  const saveState = h('span', { class: 'muted small' })
+  const saveState = h('span', { class: 'hint' })
   const save = h('button', { class: 'btn', type: 'button', onclick: async () => {
     error.hidden = true
     try {
@@ -164,7 +177,7 @@ function buildForm() {
       hasSaved = true
       changed()
     } catch (x) {
-      error.textContent = x.message
+      error.textContent = `Defaults not saved: ${x.message}`
       error.hidden = false
     }
   } }, 'Save as default')
@@ -176,15 +189,23 @@ function buildForm() {
   const defaultsBar = h('div', { class: 'adv-only defaults-bar' }, save, saveState, reset)
 
   syncers.push(() => {
-    summary.textContent = describe(saved)
+    planEl.replaceChildren(...plan(saved).map((p) => h('span', { class: 'plan-item', 'data-stage': p.stage },
+      h('span', { class: 'swatch' }), h('b', {}, p.label), ' ', p.text)))
     save.disabled = !dirty()
-    saveState.textContent = dirty() ? 'Unsaved changes: Easy mode still uses your previous defaults.'
-      : hasSaved ? 'These are your saved defaults.' : 'These are the built-in defaults.'
+    saveState.textContent = dirty() ? 'Not saved yet. Easy mode keeps using your previous defaults.'
+      : hasSaved ? 'Saved. Easy mode uses these settings.' : 'These are the built-in defaults.'
     reset.hidden = !hasSaved
   })
 
   const el = $('#form')
-  el.append(h('div', { class: 'url' }, url), easy, h('div', { class: 'adv-only steps' }, steps), error, defaultsBar, submitBtn)
+  el.append(
+    h('label', { class: 'url' }, h('span', { class: 'url-label' }, 'Video link'), url,
+      h('span', { class: 'hint' }, 'Paste one link, or several on separate lines.')),
+    easy, h('div', { class: 'adv-only steps' }, steps), defaultsBar, error, submitBtn)
+
+  url.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) el.requestSubmit()
+  })
   el.addEventListener('submit', async (e) => {
     e.preventDefault()
     const urls = url.value.split(/\s+/).filter(Boolean)
@@ -197,7 +218,7 @@ function buildForm() {
       for (const u of urls) await api.addJob({ url: u, ...opts })
       url.value = ''
     } catch (x) {
-      error.textContent = x.message
+      error.textContent = `Not added: ${x.message}`
       error.hidden = false
     } finally {
       renderNotice()
@@ -230,21 +251,20 @@ async function refreshTools(check = false) {
 function renderTools() {
   $('#tools').replaceChildren(...tools.map((t) => {
     const state = t.busy ? 'busy' : !t.installed ? 'missing' : t.updateAvailable ? 'update' : 'ok'
-    const action = t.busy ? 'Installing…' : !t.installed ? 'Install' : t.updateAvailable ? `Update to ${t.latest}` : 'Reinstall'
-    return h('button', {
-      class: `tool ${state}`, type: 'button', disabled: t.busy,
-      title: t.error ? `Last attempt failed: ${t.error}` : `${action} ${t.name}`,
-      onclick: async () => { await api.install(t.name); refreshTools() },
-    }, h('span', { class: 'dot' }), h('strong', {}, t.name),
-    h('span', { class: 'ver' }, t.busy ? 'installing…' : !t.installed ? 'click to install' : t.updateAvailable ? `${t.version} → ${t.latest}` : t.version),
-    t.error && !t.busy ? h('span', { class: 'ver bad' }, 'failed') : null)
-  }), h('button', { class: 'tool ghost', type: 'button', onclick: () => refreshTools(true) }, 'Check for updates'))
+    const status = t.busy ? 'Installing…' : !t.installed ? 'Not installed' : t.updateAvailable ? `${t.version} → ${t.latest}` : t.version
+    const action = !t.installed ? 'Install' : t.updateAvailable ? 'Update' : 'Reinstall'
+    return h('div', { class: 'tool', 'data-state': state },
+      h('span', { class: 'dot' }),
+      h('div', { class: 'tool-text' }, h('b', {}, t.name), h('span', { class: 'mono' }, status),
+        t.error && !t.busy ? h('span', { class: 'error' }, t.error) : null),
+      h('button', { class: state === 'ok' ? 'link' : 'btn small', type: 'button', disabled: t.busy,
+        onclick: async () => { await api.install(t.name); refreshTools() } }, action))
+  }))
 }
 
 // autoUpdate is Easy mode's start-up step: install whatever is missing and update what is stale.
 async function autoUpdate() {
   await refreshTools()
-  renderNotice()
   await refreshTools(true) // asks GitHub and the ffmpeg server for the latest versions
   if (mode !== 'easy') return
   const todo = tools.filter((t) => !t.busy && (!t.installed || t.updateAvailable))
@@ -256,6 +276,7 @@ async function autoUpdate() {
 // renderNotice shows the "Updating app" banner and holds the button until every tool is present.
 function renderNotice() {
   const el = $('#notice')
+  const names = (ts) => ts.map((t) => t.name).join(', ')
   const busy = tools.filter((t) => t.busy)
   const missing = tools.filter((t) => !t.installed)
   const failed = tools.filter((t) => t.error && !t.busy && (!t.installed || t.updateAvailable))
@@ -268,22 +289,22 @@ function renderNotice() {
   if (busy.length) {
     const first = busy.some((t) => !t.installed)
     el.replaceChildren(h('span', { class: 'spinner' }),
-      h('strong', {}, first ? 'Setting up GetVideo…' : 'Updating app…'),
-      h('span', {}, ` ${first ? 'Installing' : 'Updating'} ${busy.map((t) => t.name).join(', ')}. ${first ? 'This takes a minute the first time.' : 'You can keep using the app.'}`))
+      h('b', {}, first ? 'Setting up GetVideo' : 'Updating app'),
+      h('span', {}, first ? `Installing ${names(busy)}. This takes about a minute the first time.`
+        : `Updating ${names(busy)}. You can keep adding videos.`))
     el.hidden = false
   } else if (failed.length) {
     el.dataset.kind = 'bad'
-    el.replaceChildren(h('strong', {}, `Could not ${missing.length ? 'install' : 'update'} ${failed.map((t) => t.name).join(', ')}. `),
-      h('span', {}, failed[0].error + ' '),
-      h('button', { class: 'link', type: 'button', onclick: async () => {
+    el.replaceChildren(h('b', {}, `${names(failed)} did not ${missing.length ? 'install' : 'update'}`),
+      h('span', {}, failed[0].error),
+      h('button', { class: 'btn small', type: 'button', onclick: async () => {
         await Promise.all(failed.map((t) => api.install(t.name).catch(() => {})))
         refreshTools()
       } }, 'Try again'))
     el.hidden = false
   } else if (missing.length && mode === 'advanced') {
     el.dataset.kind = 'bad'
-    el.replaceChildren(h('strong', {}, `${missing.map((t) => t.name).join(', ')} not installed. `),
-      h('span', {}, 'Click the red tool above to install it.'))
+    el.replaceChildren(h('b', {}, `${names(missing)} not installed`), h('span', {}, 'Install it from the Tools panel.'))
     el.hidden = false
   } else {
     el.hidden = true
@@ -292,45 +313,45 @@ function renderNotice() {
 
 // ---- jobs -----------------------------------------------------------------
 
-const rows = new Map() // job id -> { el, update }
+const rows = new Map() // job id -> { el, update, job }
 const STAGES = ['downloading', 'transcoding', 'moving']
-const LABEL = { queued: 'Queued', downloading: 'Downloading', transcoding: 'Transcoding', moving: 'Saving', done: 'Done', failed: 'Failed', canceled: 'Canceled' }
+const LABEL = { queued: 'Waiting', downloading: 'Downloading', transcoding: 'Converting', moving: 'Saving', done: 'Done', failed: 'Failed', canceled: 'Canceled' }
 const isActive = (s) => s === 'queued' || STAGES.includes(s)
 
 // A row is built once and updated in place, so a click is never lost to a re-render mid-progress.
 function makeRow(job) {
   const title = h('div', { class: 'job-title' })
-  const badge = h('span', { class: 'badge' })
-  const steps = ['Download', 'Transcode', 'Save'].map((s) => h('span', { class: 'stage' }, s))
-  const bar = h('div', { class: 'bar' }, h('div', { class: 'fill' }))
-  const meta = h('div', { class: 'muted small' })
-  const error = h('div', { class: 'error' })
+  const status = h('div', { class: 'job-status mono' })
+  // The track is the job's timeline: one segment per stage, filled as that stage runs.
+  const segs = [['download', 'Download'], ['transcode', 'Convert'], ['output', 'Save']].map(([stage, label]) =>
+    h('div', { class: 'seg-stage', 'data-stage': stage }, h('div', { class: 'seg-bar' }, h('i', {})), h('span', {}, label)))
+  const track = h('div', { class: 'track-line' }, segs)
+  const error = h('div', { class: 'error', role: 'alert' })
   const outputs = h('div', { class: 'outputs' })
   const actions = h('div', { class: 'actions' })
   const log = h('pre', { class: 'log', hidden: true })
-  const el = h('article', { class: 'job' }, h('div', { class: 'job-head' }, title, badge),
-    h('div', { class: 'stages' }, steps), bar, meta, error, outputs, actions, log)
+  const el = h('article', { class: 'job' }, h('div', { class: 'job-head' }, title, status), track, error, outputs, actions, log)
 
   let lastStatus = null
   let lastOutputs = ''
+  const row = { el, job }
 
-  const update = (j) => {
+  row.update = (j) => {
+    row.job = j
     title.textContent = j.title
     title.title = j.url
-    badge.textContent = LABEL[j.status]
     el.dataset.status = j.status
 
     const at = STAGES.indexOf(j.status)
-    const skipTranscode = j.transcode.skip || j.download.audioOnly
-    steps.forEach((s, i) => {
-      s.dataset.state = j.status === 'done' || (at > i) ? 'done' : at === i ? 'active' : ''
-      if (i === 1) s.hidden = skipTranscode
+    status.textContent = at >= 0 && at < 2
+      ? [`${LABEL[j.status]} ${j.percent.toFixed(0)}%`, j.speed, j.eta && `${j.eta} left`].filter(Boolean).join(' · ')
+      : LABEL[j.status]
+    segs.forEach((s, i) => {
+      const fill = j.status === 'done' || at > i ? 100 : at === i ? (i === 2 ? 100 : Math.min(100, j.percent)) : 0
+      s.querySelector('i').style.width = `${fill}%`
+      s.dataset.state = fill >= 100 && at !== i ? 'done' : at === i ? 'active' : ''
     })
-
-    const running = at >= 0
-    bar.hidden = meta.hidden = !running
-    bar.firstChild.style.width = `${Math.min(100, j.percent)}%`
-    meta.textContent = [`${j.percent.toFixed(1)}%`, j.speed, j.eta && `ETA ${j.eta}`].filter(Boolean).join(' · ')
+    segs[1].hidden = j.transcode.skip || j.download.audioOnly
 
     error.hidden = !j.error
     error.textContent = j.error ?? ''
@@ -338,8 +359,12 @@ function makeRow(job) {
     const outs = (j.outputs ?? []).join('\n')
     if (outs !== lastOutputs) {
       lastOutputs = outs
-      outputs.replaceChildren(...(j.outputs ?? []).map((o) => h('div', { class: 'output' },
-        h('code', {}, o), h('button', { class: 'link', type: 'button', onclick: () => api.reveal(o) }, 'Show in Finder'))))
+      outputs.replaceChildren(...(j.outputs ?? []).map((o) => {
+        const cut = o.lastIndexOf('/') + 1
+        return h('div', { class: 'output' },
+          h('div', { class: 'path', title: o }, h('b', {}, o.slice(cut)), h('span', {}, o.slice(0, cut))),
+          h('button', { class: 'btn small', type: 'button', onclick: () => api.reveal(o) }, 'Show in Finder'))
+      }))
     }
 
     if (j.status !== lastStatus) {
@@ -347,21 +372,24 @@ function makeRow(job) {
       const btn = (label, fn, cls = 'btn small') => h('button', { class: cls, type: 'button', onclick: fn }, label)
       actions.replaceChildren(...[
         isActive(j.status) && btn('Cancel', () => api.cancel(j.id)),
-        (j.status === 'failed' || j.status === 'canceled') && btn('Retry', () => api.retry(j.id)),
-        !isActive(j.status) && btn('Remove', () => api.remove(j.id)),
-        btn('Log', () => { log.hidden = !log.hidden; log.scrollTop = log.scrollHeight }, 'link'),
+        (j.status === 'failed' || j.status === 'canceled') && btn('Try again', () => api.retry(j.id)),
+        !isActive(j.status) && btn('Remove', () => api.remove(j.id), 'link'),
+        btn('Details', () => { log.hidden = !log.hidden; log.scrollTop = log.scrollHeight }, 'link details'),
       ].filter(Boolean))
+      updateClear()
     }
 
-    if (!log.hidden || j.log.length !== log._n) {
-      const pinned = log.scrollTop + log.clientHeight >= log.scrollHeight - 20
-      log.textContent = j.log.join('\n') || '(no output yet)'
-      log._n = j.log.length
-      if (pinned) log.scrollTop = log.scrollHeight
-    }
+    const pinned = log.scrollTop + log.clientHeight >= log.scrollHeight - 20
+    log.textContent = j.log.join('\n') || 'No output yet.'
+    if (pinned) log.scrollTop = log.scrollHeight
   }
-  update(job)
-  return { el, update }
+  row.update(job)
+  return row
+}
+
+function updateClear() {
+  $('#clear').hidden = ![...rows.values()].some((r) => !isActive(r.job.status))
+  $('#empty').hidden = rows.size > 0
 }
 
 function upsertJob(j) {
@@ -372,13 +400,13 @@ function upsertJob(j) {
     rows.set(j.id, row)
     $('#jobs').prepend(row.el) // newest first
   }
-  $('#empty').hidden = rows.size > 0
+  updateClear()
 }
 
 function removeJob(id) {
   rows.get(id)?.el.remove()
   rows.delete(id)
-  $('#empty').hidden = rows.size > 0
+  updateClear()
 }
 
 async function loadJobs() {
@@ -409,7 +437,11 @@ async function start() {
     }
   } catch { /* fall back to the built-in defaults */ }
   buildForm()
-  $('#mode').addEventListener('click', () => setMode(mode === 'easy' ? 'advanced' : 'easy'))
+  document.querySelectorAll('.seg button').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)))
+  $('#check').addEventListener('click', () => refreshTools(true))
+  $('#clear').addEventListener('click', () => {
+    for (const r of rows.values()) if (!isActive(r.job.status)) api.remove(r.job.id).catch(() => {})
+  })
   setMode(mode)
   listen()
   autoUpdate()

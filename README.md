@@ -4,6 +4,17 @@ Single-binary macOS service: paste a YouTube link, download it with yt-dlp, tran
 HandBrakeCLI, and save it to a folder you choose. The UI is a web page served on `127.0.0.1:8765`.
 
 
+For educational use only. It was made for teachers who need to show short educational videos in
+class without relying on the classroom's internet connection, and without the adverts.
+
+## Built on
+
+GetVideo is a thin layer over the work of others: [yt-dlp](https://github.com/yt-dlp/yt-dlp) does
+every download, [HandBrake](https://handbrake.fr) does every conversion, and both rely on
+[FFmpeg](https://ffmpeg.org). GetVideo is not affiliated with or endorsed by any of them.
+
+Site: https://davewat.github.io/getvideo/ (the `web` branch).
+
 ## Build and run
 
     ./build.sh            # dist/getvideo, universal (Apple Silicon + Intel)
