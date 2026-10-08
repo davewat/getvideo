@@ -148,3 +148,18 @@ nav a { white-space: nowrap; }
   nav a[href="#how"] { display: none; }
   .demo-input { min-height: 64px; }
 }
+
+/* ---- education, personal note, credits ---- */
+.edu { margin-top: 18px; font: 600 15px/1 var(--display); text-transform: uppercase; letter-spacing: .12em; color: var(--soft); }
+.note-block { background: var(--deck); max-width: none; border-top: 1px solid var(--line); }
+.note-block > * { max-width: 1088px; margin-left: auto; margin-right: auto; }
+.letter { margin-top: 28px; display: grid; gap: 16px; font-size: clamp(19px, 2.1vw, 24px); line-height: 1.5; }
+.letter p { max-width: 30em; }
+.letter p:first-child { font-weight: 600; }
+.sig { font: 600 30px/1 var(--display); text-transform: uppercase; letter-spacing: .08em; margin-top: 8px; }
+.sig::before { content: ''; display: block; width: 48px; height: 3px; margin-bottom: 14px; background: var(--ink); }
+.giants { margin-top: 40px; display: grid; gap: 3px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.giants article { display: grid; gap: 12px; align-content: start; padding: 26px 24px 24px; background: var(--deck); border-top: 9px solid var(--stage); }
+.giants h3 { text-transform: none; font-size: 30px; letter-spacing: .01em; }
+.giants a { font: 14px var(--mono); }
+@media (max-width: 720px) { nav a[href="#giants"] { display: none; } }

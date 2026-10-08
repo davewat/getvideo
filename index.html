@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>GetVideo: paste a link, get a file</title>
-  <meta name="description" content="GetVideo is a free Mac app that downloads a video with yt-dlp, converts it with HandBrake and saves it to a folder you choose.">
+  <meta name="description" content="GetVideo is a free Mac app for teachers. It saves an educational video to your computer so you can show it in class without the internet or the adverts. Built on yt-dlp and HandBrake.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -19,6 +19,7 @@
     </a>
     <nav>
       <a href="#how">How it works</a>
+      <a href="#giants">Credits</a>
       <a href="#install">Install</a>
       <a href="https://github.com/davewat/getvideo">GitHub</a>
     </nav>
@@ -28,11 +29,12 @@
     <section class="hero">
       <div class="hero-copy">
         <h1>Paste a link.<br>Get a file.</h1>
-        <p class="lede">GetVideo is a free Mac app that downloads a video, converts it with HandBrake and saves it to the folder you choose. One paste, no settings to learn.</p>
+        <p class="lede">GetVideo is a free Mac app for teachers. It saves an educational video to your computer, so you can show it in class without the internet and without the adverts.</p>
         <div class="cta">
           <a class="btn primary" href="https://github.com/davewat/getvideo/releases/latest">Download for Mac</a>
           <span class="meta"><span id="version">Latest release</span> · Apple Silicon and Intel · MIT licence</span>
         </div>
+        <p class="edu">For educational use only.</p>
       </div>
 
       <!-- A working miniature of the app's Easy view; demo.js plays one job through it. -->
@@ -98,6 +100,34 @@
       </div>
     </section>
 
+    <section class="block note-block" id="why">
+      <h2>Why I made this</h2>
+      <div class="letter">
+        <p>I made GetVideo for the teachers in my life.</p>
+        <p>They find short, educational videos online that are exactly right for a lesson. Then the classroom has no internet that day, or the video opens with a run of commercials in front of thirty children.</p>
+        <p>GetVideo lets them save the video at home the night before and play it from their own computer: no connection needed, no adverts, no surprises.</p>
+        <p class="sig">Dave</p>
+      </div>
+    </section>
+
+    <section class="block" id="giants">
+      <h2>On the shoulders of giants</h2>
+      <p class="intro">GetVideo is a thin layer. The hard work is done by open-source projects that volunteers have built and maintained for years. If GetVideo is useful to you, the thanks belong to them.</p>
+      <div class="giants">
+        <article data-stage="download">
+          <h3><i class="swatch"></i>yt-dlp</h3>
+          <p>The community-maintained downloader, forked from youtube-dl, that does every download in GetVideo. Its contributors keep it working as video sites change, week after week.</p>
+          <a href="https://github.com/yt-dlp/yt-dlp">github.com/yt-dlp/yt-dlp</a>
+        </article>
+        <article data-stage="convert">
+          <h3><i class="swatch"></i>HandBrake</h3>
+          <p>The open-source video transcoder that does every conversion in GetVideo. Its presets are the reason a file plays properly on a classroom computer without any tuning.</p>
+          <a href="https://handbrake.fr">handbrake.fr</a>
+        </article>
+      </div>
+      <p class="note">Both rely in turn on <a href="https://ffmpeg.org">FFmpeg</a>, which GetVideo also uses to join video and audio. GetVideo is an independent project and is not affiliated with or endorsed by any of them.</p>
+    </section>
+
     <section class="block">
       <h2>It sets up its own tools</h2>
       <p class="intro">On first start GetVideo downloads the three programs it relies on, and keeps them current each time it opens. They live in the app's own folder, not system-wide.</p>
@@ -136,7 +166,7 @@
   <footer>
     <span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
     <p>GetVideo is open source under the MIT licence. <a href="https://github.com/davewat/getvideo">Source on GitHub</a>.</p>
-    <p class="fine">Download only videos you have the right to keep. GetVideo is not affiliated with YouTube, yt-dlp, HandBrake or FFmpeg.</p>
+    <p class="fine">GetVideo is for educational use only. Save only videos you have the right to keep and show, and follow the terms of the site they come from. GetVideo is not affiliated with YouTube, yt-dlp, HandBrake or FFmpeg.</p>
   </footer>
 </body>
 </html>
