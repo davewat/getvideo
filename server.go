@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -63,6 +64,44 @@ func (s *server) handler() http.Handler {
 		}
 		writeJSON(w, 200, g)
 	})
+	// Saved defaults: what Easy mode runs with, and what the Advanced form starts from.
+	mux.HandleFunc("GET /api/settings", func(w http.ResponseWriter, r *http.Request) {
+		b, err := os.ReadFile(s.settingsPath())
+		if err != nil {
+			b = []byte("null") // nothing saved; the page uses its built-in defaults
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(b)
+	})
+	mux.HandleFunc("PUT /api/settings", func(w http.ResponseWriter, r *http.Request) {
+		var v Settings
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&v); err != nil {
+			httpErr(w, 400, err)
+			return
+		}
+		if _, err := v.Download.args(); err != nil {
+			httpErr(w, 400, err)
+			return
+		}
+		if _, err := v.Transcode.args(); err != nil {
+			httpErr(w, 400, err)
+			return
+		}
+		v.Output.Filename = "" // a file name belongs to one video, never to the defaults
+		b, _ := json.MarshalIndent(v, "", " ")
+		if err := os.WriteFile(s.settingsPath(), b, 0o644); err != nil {
+			httpErr(w, 500, err)
+			return
+		}
+		writeJSON(w, 200, v)
+	})
+	mux.HandleFunc("DELETE /api/settings", func(w http.ResponseWriter, r *http.Request) {
+		if err := os.Remove(s.settingsPath()); err != nil && !os.IsNotExist(err) {
+			httpErr(w, 500, err)
+			return
+		}
+		writeJSON(w, 200, map[string]bool{"ok": true})
+	})
 	mux.HandleFunc("GET /api/jobs", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 200, s.q.list())
 	})
@@ -115,6 +154,15 @@ func (s *server) handler() http.Handler {
 	mux.Handle("/", spa(s.web))
 	return s.guard(mux)
 }
+
+// Settings are the user's saved defaults.
+type Settings struct {
+	Download  DownloadOptions  `json:"download"`
+	Transcode TranscodeOptions `json:"transcode"`
+	Output    OutputOptions    `json:"output"`
+}
+
+func (s *server) settingsPath() string { return filepath.Join(s.q.dir, "settings.json") }
 
 func (s *server) ok(w http.ResponseWriter, found bool) {
 	if !found {

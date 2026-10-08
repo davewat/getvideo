@@ -2,23 +2,40 @@ import { api } from './api.js'
 import { $, h } from './dom.js'
 import { defaults, sections } from './schema.js'
 
-const STORE = 'getvideo.form.v2'
+const MODE = 'getvideo.mode'
 
 // ---- form state -----------------------------------------------------------
+// `saved` is the defaults stored by the service: Easy mode always runs with them.
+// `form` is the Advanced form's working copy; it only becomes `saved` on "Save as default".
 
+const withoutTransient = (v) => {
+  const keep = structuredClone(v)
+  for (const s of sections) for (const f of s.fields) if (f.transient) keep[s.key][f.key] = defaults[s.key][f.key]
+  return keep
+}
+
+let saved = structuredClone(defaults)
 const form = structuredClone(defaults)
-try {
-  const saved = JSON.parse(localStorage.getItem(STORE) ?? '{}')
-  for (const k of Object.keys(form)) Object.assign(form[k], saved[k] ?? {})
-} catch { /* storage unavailable */ }
+let hasSaved = false // false = still on the built-in defaults
 
 const syncers = [] // re-evaluate each field's disabled/hidden state after any change
+const dirty = () => JSON.stringify(withoutTransient(form)) !== JSON.stringify(saved)
 
 function changed() {
   for (const s of syncers) s()
-  const keep = structuredClone(form)
-  for (const s of sections) for (const f of s.fields) if (f.transient) delete keep[s.key][f.key]
-  try { localStorage.setItem(STORE, JSON.stringify(keep)) } catch { /* storage unavailable */ }
+}
+
+let mode = 'easy'
+try { if (localStorage.getItem(MODE) === 'advanced') mode = 'advanced' } catch { /* storage unavailable */ }
+
+function setMode(m) {
+  mode = m
+  try { localStorage.setItem(MODE, m) } catch { /* storage unavailable */ }
+  document.body.dataset.mode = m
+  $('#mode').textContent = m === 'easy' ? 'Advanced' : 'Easy mode'
+  $('#mode').title = m === 'easy' ? 'Show every download and transcode option' : 'Back to the simple view'
+  changed()
+  renderNotice()
 }
 
 // ---- field rendering ------------------------------------------------------
@@ -106,10 +123,22 @@ function field(section, f) {
   return wrap
 }
 
+// describe sums up the saved defaults in one line for Easy mode.
+function describe(v) {
+  const d = v.download
+  const t = v.transcode
+  const parts = [d.audioOnly ? `Audio only (${d.audioFormat})` : d.maxHeight ? `Up to ${d.maxHeight}p` : 'Best quality']
+  if (!d.audioOnly) parts.push(t.skip ? 'no transcoding' : [t.preset || 'HandBrake', t.container].filter(Boolean).join(' · '))
+  parts.push(`saved to ${v.output.dir || '~/Downloads'}`)
+  return parts.join(' → ')
+}
+
+let submitBtn = null
+
 function buildForm() {
-  const url = h('textarea', { rows: 2, placeholder: 'Paste one or more YouTube links…', spellcheck: false, required: true })
+  const url = h('textarea', { rows: 2, placeholder: 'Paste one or more YouTube links…', required: true })
   const error = h('p', { class: 'error', hidden: true })
-  const submit = h('button', { class: 'btn primary', type: 'submit' }, 'Add to queue')
+  submitBtn = h('button', { class: 'btn primary', type: 'submit' }, 'Get video')
 
   const steps = sections.map((s, i) => {
     const basic = s.fields.filter((f) => !f.advanced).map((f) => field(s, f))
@@ -121,22 +150,57 @@ function buildForm() {
       adv.length ? h('details', { class: 'more' }, h('summary', {}, 'More options'), h('div', { class: 'grid' }, adv)) : null)
   })
 
+  // Easy mode: one line saying what will happen, and the way into Advanced.
+  const summary = h('span', {})
+  const easy = h('p', { class: 'easy-only summary muted' }, summary, ' ',
+    h('button', { class: 'link', type: 'button', onclick: () => setMode('advanced') }, 'Change'))
+
+  // Advanced mode: every option, plus saving them as the defaults Easy mode uses.
+  const saveState = h('span', { class: 'muted small' })
+  const save = h('button', { class: 'btn', type: 'button', onclick: async () => {
+    error.hidden = true
+    try {
+      saved = withoutTransient(await api.saveSettings(withoutTransient(form)))
+      hasSaved = true
+      changed()
+    } catch (x) {
+      error.textContent = x.message
+      error.hidden = false
+    }
+  } }, 'Save as default')
+  const reset = h('button', { class: 'link', type: 'button', onclick: async () => {
+    if (!confirm('Discard your saved defaults and go back to the built-in ones?')) return
+    await api.resetSettings()
+    location.reload()
+  } }, 'Reset to built-in defaults')
+  const defaultsBar = h('div', { class: 'adv-only defaults-bar' }, save, saveState, reset)
+
+  syncers.push(() => {
+    summary.textContent = describe(saved)
+    save.disabled = !dirty()
+    saveState.textContent = dirty() ? 'Unsaved changes: Easy mode still uses your previous defaults.'
+      : hasSaved ? 'These are your saved defaults.' : 'These are the built-in defaults.'
+    reset.hidden = !hasSaved
+  })
+
   const el = $('#form')
-  el.append(h('div', { class: 'url' }, url), ...steps, error, submit)
+  el.append(h('div', { class: 'url' }, url), easy, h('div', { class: 'adv-only steps' }, steps), error, defaultsBar, submitBtn)
   el.addEventListener('submit', async (e) => {
     e.preventDefault()
     const urls = url.value.split(/\s+/).filter(Boolean)
     if (!urls.length) return
     error.hidden = true
-    submit.disabled = true
+    submitBtn.disabled = true
     try {
-      for (const u of urls) await api.addJob({ url: u, ...structuredClone(form) })
+      // Easy mode never sends unsaved Advanced edits.
+      const opts = structuredClone(mode === 'easy' ? saved : form)
+      for (const u of urls) await api.addJob({ url: u, ...opts })
       url.value = ''
     } catch (x) {
       error.textContent = x.message
       error.hidden = false
     } finally {
-      submit.disabled = false
+      renderNotice()
     }
   })
   changed()
@@ -151,6 +215,7 @@ let presetsLoadedFor = null
 async function refreshTools(check = false) {
   try { tools = await api.tools(check) } catch { return }
   renderTools()
+  renderNotice()
   const busy = tools.some((t) => t.busy)
   if (busy && !pollTimer) pollTimer = setInterval(() => refreshTools(false), 1000)
   if (!busy && pollTimer) { clearInterval(pollTimer); pollTimer = null }
@@ -174,6 +239,55 @@ function renderTools() {
     h('span', { class: 'ver' }, t.busy ? 'installing…' : !t.installed ? 'click to install' : t.updateAvailable ? `${t.version} → ${t.latest}` : t.version),
     t.error && !t.busy ? h('span', { class: 'ver bad' }, 'failed') : null)
   }), h('button', { class: 'tool ghost', type: 'button', onclick: () => refreshTools(true) }, 'Check for updates'))
+}
+
+// autoUpdate is Easy mode's start-up step: install whatever is missing and update what is stale.
+async function autoUpdate() {
+  await refreshTools()
+  renderNotice()
+  await refreshTools(true) // asks GitHub and the ffmpeg server for the latest versions
+  if (mode !== 'easy') return
+  const todo = tools.filter((t) => !t.busy && (!t.installed || t.updateAvailable))
+  if (!todo.length) return
+  await Promise.all(todo.map((t) => api.install(t.name).catch(() => {})))
+  await refreshTools()
+}
+
+// renderNotice shows the "Updating app" banner and holds the button until every tool is present.
+function renderNotice() {
+  const el = $('#notice')
+  const busy = tools.filter((t) => t.busy)
+  const missing = tools.filter((t) => !t.installed)
+  const failed = tools.filter((t) => t.error && !t.busy && (!t.installed || t.updateAvailable))
+  const ready = tools.length > 0 && missing.length === 0
+  if (submitBtn) {
+    submitBtn.disabled = !ready
+    submitBtn.textContent = ready ? (mode === 'easy' ? 'Get video' : 'Add to queue') : 'Getting ready…'
+  }
+  el.dataset.kind = ''
+  if (busy.length) {
+    const first = busy.some((t) => !t.installed)
+    el.replaceChildren(h('span', { class: 'spinner' }),
+      h('strong', {}, first ? 'Setting up GetVideo…' : 'Updating app…'),
+      h('span', {}, ` ${first ? 'Installing' : 'Updating'} ${busy.map((t) => t.name).join(', ')}. ${first ? 'This takes a minute the first time.' : 'You can keep using the app.'}`))
+    el.hidden = false
+  } else if (failed.length) {
+    el.dataset.kind = 'bad'
+    el.replaceChildren(h('strong', {}, `Could not ${missing.length ? 'install' : 'update'} ${failed.map((t) => t.name).join(', ')}. `),
+      h('span', {}, failed[0].error + ' '),
+      h('button', { class: 'link', type: 'button', onclick: async () => {
+        await Promise.all(failed.map((t) => api.install(t.name).catch(() => {})))
+        refreshTools()
+      } }, 'Try again'))
+    el.hidden = false
+  } else if (missing.length && mode === 'advanced') {
+    el.dataset.kind = 'bad'
+    el.replaceChildren(h('strong', {}, `${missing.map((t) => t.name).join(', ')} not installed. `),
+      h('span', {}, 'Click the red tool above to install it.'))
+    el.hidden = false
+  } else {
+    el.hidden = true
+  }
 }
 
 // ---- jobs -----------------------------------------------------------------
@@ -284,6 +398,21 @@ function listen() {
   es.onopen = () => loadJobs().catch(() => {}) // also resyncs after a dropped stream reconnects
 }
 
-buildForm()
-refreshTools().then(() => refreshTools(true)) // show installed state at once, then look for updates
-listen()
+async function start() {
+  try {
+    const v = await api.settings()
+    if (v) {
+      hasSaved = true
+      for (const k of Object.keys(saved)) Object.assign(saved[k], v[k] ?? {})
+      saved = withoutTransient(saved)
+      Object.assign(form, structuredClone(saved))
+    }
+  } catch { /* fall back to the built-in defaults */ }
+  buildForm()
+  $('#mode').addEventListener('click', () => setMode(mode === 'easy' ? 'advanced' : 'easy'))
+  setMode(mode)
+  listen()
+  autoUpdate()
+}
+
+start()

@@ -20,5 +20,8 @@ export const api = {
   retry: (id) => call('POST', `/api/jobs/${id}/retry`),
   remove: (id) => call('DELETE', `/api/jobs/${id}`),
   reveal: (path) => call('POST', '/api/reveal', { path }),
+  settings: () => call('GET', '/api/settings'),
+  saveSettings: (v) => call('PUT', '/api/settings', v),
+  resetSettings: () => call('DELETE', '/api/settings'),
   pickFolder: () => call('POST', '/api/pick-folder'),
 }

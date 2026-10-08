@@ -13,6 +13,13 @@ HandBrakeCLI, and save it to a folder you choose. The UI is a web page served on
 Flags: `-port 8765`, `-no-open`, `-data <dir>` (default `~/Library/Application Support/GetVideo`).
 After editing anything in `web/`, rebuild: the files are embedded in the binary.
 
+## Easy and Advanced mode
+
+The page opens in Easy mode: it installs or updates yt-dlp, HandBrakeCLI and ffmpeg on start
+(showing an "Updating app" notice), and offers only a paste box. Advanced mode shows every
+option; "Save as default" stores them in `settings.json` in the data directory, and Easy mode
+runs with those saved defaults.
+
 ## Layout
 - `tools.go` installs/updates yt-dlp (checksum-verified), HandBrakeCLI (from the .dmg), ffmpeg (static build).
 - `jobs.go` the queue: download -> transcode -> move; progress over SSE (`/api/events`); `jobs.json` history.

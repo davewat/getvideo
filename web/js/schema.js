@@ -2,7 +2,7 @@
 
 export const defaults = {
   download: {
-    maxHeight: 0, audioOnly: false, audioFormat: 'mp3', mergeContainer: 'mp4', formatSort: '', customFormat: '',
+    maxHeight: 1080, audioOnly: false, audioFormat: 'mp3', mergeContainer: 'mp4', formatSort: '', customFormat: '',
     noPlaylist: true, subtitles: false, autoSubs: false, subLangs: 'en', embedSubs: false, embedMetadata: true,
     embedThumbnail: false, cookiesBrowser: '', rateLimit: '', proxy: '', sponsorBlock: [], extraArgs: '',
   },
