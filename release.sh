@@ -27,11 +27,12 @@ git tag -a "$VERSION" -m "GetVideo $VERSION"
 ./build.sh
 ./mac/build.sh
 
-ZIP="dist/getvideo-$VERSION-mac-go.zip"
+# No version in the file names: the site and README link to releases/latest/download/<name>.
+ZIP="dist/getvideo-mac-go.zip"
 rm -f "$ZIP"
 ditto -c -k --keepParent dist/getvideo "$ZIP"
 
-APPZIP="dist/GetVideo-$VERSION-mac-native.zip"
+APPZIP="dist/GetVideo-mac-native.zip"
 rm -f "$APPZIP"
 ditto -c -k --sequesterRsrc --keepParent dist/GetVideo.app "$APPZIP"
 

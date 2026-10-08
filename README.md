@@ -39,23 +39,30 @@ tracking.
 
 ## Install
 
-Download from the [releases page](https://github.com/davewat/getvideo/releases/latest). Neither
-download is notarized by Apple yet, so macOS blocks it until you clear the download flag in
-Terminal, as shown below.
+GetVideo is not signed with Apple yet, so the first time you open it macOS asks you to allow it.
+You only do this once.
 
-**Mac Native (preferred).** A regular Mac app. Download it and unzip it. Then:
+1. **Download.** [Click here to download GetVideo](https://github.com/davewat/getvideo/releases/latest/download/GetVideo-mac-native.zip).
+   Safari unzips it for you; in other browsers, double-click the zip in your Downloads folder.
+2. **Copy it to your Applications folder.** Drag **GetVideo** from Downloads into **Applications**.
+3. **Open it, and close the warning.** Double-click GetVideo. macOS says it could not verify the
+   app. Click **Done** (on older versions of macOS the button is **Cancel** or **OK**). Do not
+   click Move to Trash.
+4. **Allow it.** Click the Apple menu, then **System Settings**, then **Privacy & Security**.
+   Scroll down to **Security**. Next to "GetVideo was blocked", click **Open Anyway**, enter your
+   password or use Touch ID, then click **Open**.
 
-    xattr -dr com.apple.quarantine ~/Downloads/GetVideo.app
+GetVideo opens, and from now on it opens like any other app. The first start takes about a minute
+while it installs its tools. It needs macOS 14 or later.
 
-Double-click GetVideo. The first start takes about a minute while the tools install. Needs
-macOS 14 or later.
-
-**Mac Go version.** Runs in your browser. Download it and unzip it. Then:
+**Prefer the browser version?** The Mac Go version runs in your browser instead.
+[Download it](https://github.com/davewat/getvideo/releases/latest/download/getvideo-mac-go.zip),
+unzip it, then in Terminal:
 
     xattr -d com.apple.quarantine ~/Downloads/getvideo
     ~/Downloads/getvideo
 
-Your browser opens the app. Keep the Terminal window open while you use it.
+Keep the Terminal window open while you use it.
 
 ## On the shoulders of giants
 
