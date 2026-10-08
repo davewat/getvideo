@@ -43,14 +43,14 @@ Download from the [releases page](https://github.com/davewat/getvideo/releases/l
 download is notarized by Apple yet, so macOS blocks it until you clear the download flag in
 Terminal, as shown below.
 
-**The Mac app (recommended).** Download `GetVideo-…-macos.zip` and unzip it. Then:
+**Mac Native (preferred).** A regular Mac app. Download it and unzip it. Then:
 
     xattr -dr com.apple.quarantine ~/Downloads/GetVideo.app
 
 Double-click GetVideo. The first start takes about a minute while the tools install. Needs
 macOS 14 or later.
 
-**The browser version.** Download `getvideo-…-macos-universal.zip` and unzip it. Then:
+**Mac Go version.** Runs in your browser. Download it and unzip it. Then:
 
     xattr -d com.apple.quarantine ~/Downloads/getvideo
     ~/Downloads/getvideo

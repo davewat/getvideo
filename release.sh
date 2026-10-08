@@ -27,14 +27,15 @@ git tag -a "$VERSION" -m "GetVideo $VERSION"
 ./build.sh
 ./mac/build.sh
 
-ZIP="dist/getvideo-$VERSION-macos-universal.zip"
+ZIP="dist/getvideo-$VERSION-mac-go.zip"
 rm -f "$ZIP"
 ditto -c -k --keepParent dist/getvideo "$ZIP"
 
-APPZIP="dist/GetVideo-$VERSION-macos.zip"
+APPZIP="dist/GetVideo-$VERSION-mac-native.zip"
 rm -f "$APPZIP"
 ditto -c -k --sequesterRsrc --keepParent dist/GetVideo.app "$APPZIP"
 
 echo "==> publishing"
 git push origin "$VERSION"
-gh release create "$VERSION" "$ZIP" "$APPZIP" --title "GetVideo $VERSION" --generate-notes
+# The text after # is the name shown on the release page.
+gh release create "$VERSION" "$APPZIP#Mac Native (preferred)" "$ZIP#Mac Go version" --title "GetVideo $VERSION" --generate-notes

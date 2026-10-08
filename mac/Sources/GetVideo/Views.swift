@@ -35,6 +35,11 @@ struct ContentView: View {
                 .fixedSize()
             }
         }
+        .onChange(of: mode) { WindowSizer.apply(mode: mode, animate: true) }
+        .onAppear {
+            // The window does not exist yet while its content is appearing.
+            DispatchQueue.main.async { WindowSizer.apply(mode: mode, animate: false) }
+        }
         .task {
             await tools.refresh(checkLatest: false)
             // Easy mode installs and updates the tools by itself; Advanced only reports.
