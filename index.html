@@ -31,15 +31,15 @@
         <h1>Paste a link.<br>Get a file.</h1>
         <p class="lede">GetVideo is a free Mac app for teachers. It saves an educational video to your computer, so you can show it in class without the internet and without the adverts.</p>
         <div class="cta">
-          <a class="btn primary" href="https://github.com/davewat/getvideo/releases/latest">Download for Mac</a>
-          <span class="meta"><span id="version">Latest release</span> · Apple Silicon and Intel · MIT licence</span>
+          <a class="btn primary" href="https://github.com/davewat/getvideo/releases/latest/download/GetVideo-mac-native.zip">Download for Mac</a>
+          <span class="meta"><span id="version">Latest release</span> · macOS 14 or later · MIT licence</span>
         </div>
         <p class="edu">For educational use only.</p>
       </div>
 
       <!-- A working miniature of the app's Easy view; demo.js plays one job through it. -->
       <div class="demo" aria-label="Demonstration of GetVideo handling one video">
-        <div class="demo-bar"><span></span><span></span><span></span><b>127.0.0.1:8765</b></div>
+        <div class="demo-bar"><span></span><span></span><span></span><b>GetVideo</b></div>
         <div class="demo-body">
           <div class="label">Video link</div>
           <div class="demo-input" id="demo-url"><span class="caret"></span></div>
@@ -144,22 +144,34 @@
 
     <section class="block" id="install">
       <h2>Install</h2>
+      <p class="intro">GetVideo is not signed with Apple yet, so the first time you open it macOS asks you to allow it. You only do this once.</p>
       <ol class="steps">
         <li>
-          <h3>Download and unzip</h3>
-          <p>Get the latest zip from the <a href="https://github.com/davewat/getvideo/releases/latest">releases page</a> and double-click it. You get one file named <code>getvideo</code>.</p>
+          <h3>Download</h3>
+          <p><a href="https://github.com/davewat/getvideo/releases/latest/download/GetVideo-mac-native.zip">Click here to download GetVideo</a>. Safari unzips it for you; in other browsers, double-click the zip in your Downloads folder.</p>
         </li>
         <li>
-          <h3>Allow it to run</h3>
-          <p>The app is not notarized by Apple yet, so macOS blocks it until you clear the download flag. In Terminal:</p>
-          <pre><code>xattr -d com.apple.quarantine ~/Downloads/getvideo</code></pre>
+          <h3>Copy it to your Applications folder</h3>
+          <p>Drag <b>GetVideo</b> from Downloads into <b>Applications</b>.</p>
         </li>
         <li>
-          <h3>Start it</h3>
-          <pre><code>~/Downloads/getvideo</code></pre>
-          <p>Your browser opens the app. The first start takes about a minute while the tools install. Keep the Terminal window open while you use it.</p>
+          <h3>Open it, and close the warning</h3>
+          <p>Double-click GetVideo. macOS says it could not verify the app. Click <b>Done</b> (on older versions of macOS the button is <b>Cancel</b> or <b>OK</b>). Do not click Move to Trash.</p>
+        </li>
+        <li>
+          <h3>Allow it</h3>
+          <p>Click the Apple menu, then <b>System Settings</b>, then <b>Privacy &amp; Security</b>. Scroll down to <b>Security</b>. Next to "GetVideo was blocked", click <b>Open Anyway</b>.</p>
+        </li>
+        <li>
+          <h3>Enter your password</h3>
+          <p>macOS asks for your Mac password (or Touch ID) to confirm.</p>
+        </li>
+        <li>
+          <h3>Open GetVideo again</h3>
+          <p>Double-click it in Applications once more, and it opens. From now on it opens like any other app. The first start takes about a minute while it installs its tools.</p>
         </li>
       </ol>
+      <p class="note">Prefer to run it in your browser? <a href="https://github.com/davewat/getvideo/releases/latest/download/getvideo-mac-go.zip">Download the Mac Go version</a> and follow the <a href="https://github.com/davewat/getvideo#install">instructions in the README</a>.</p>
     </section>
   </main>
 
