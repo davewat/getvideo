@@ -6,8 +6,6 @@ import Foundation
 ///   GETVIDEO_DATA=/path        keep tools, settings and history there (read by AppPaths)
 ///   GETVIDEO_ADD="url url"     queue these links at launch, with the saved defaults
 ///   GETVIDEO_ADD_DIR=/path     ...but save those into this folder
-///
-/// The mode can be forced the standard way: `GetVideo -mode advanced`.
 @MainActor
 enum DevHooks {
     static func start(settings: SettingsStore, queue: JobQueue) {

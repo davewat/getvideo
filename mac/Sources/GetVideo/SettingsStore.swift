@@ -1,13 +1,14 @@
 import Foundation
 
-/// The saved defaults (what Easy mode runs with) and the Advanced form's working copy.
+/// The saved defaults and the settings pages' working copy.
 @MainActor
 final class SettingsStore: ObservableObject {
     /// What "Save as default" last stored, or the built-in defaults.
     @Published private(set) var saved = Settings()
     /// False while still on the built-in defaults.
     @Published private(set) var hasSaved = false
-    /// The Advanced form edits this; it only becomes `saved` on `saveDraftAsDefault()`.
+    /// What the settings pages edit and what new videos run with. It starts as `saved` each
+    /// launch and only becomes `saved` on `saveDraftAsDefault()`.
     @Published var draft = Settings()
 
     private let file: URL
@@ -21,7 +22,7 @@ final class SettingsStore: ObservableObject {
         draft = saved
     }
 
-    /// True when the Advanced form differs from the saved defaults (the file name never counts).
+    /// True when the settings differ from the saved defaults (the file name never counts).
     var isDirty: Bool { Self.withoutFilename(draft) != saved }
 
     func saveDraftAsDefault() throws {
@@ -34,6 +35,13 @@ final class SettingsStore: ObservableObject {
         try enc.encode(v).write(to: file, options: .atomic)
         saved = v
         hasSaved = true
+    }
+
+    /// Throws away unsaved edits (the next video's file name is kept).
+    func discardDraft() {
+        let filename = draft.output.filename
+        draft = saved
+        draft.output.filename = filename
     }
 
     func resetToBuiltIn() {

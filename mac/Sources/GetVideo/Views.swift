@@ -1,57 +1,5 @@
 import SwiftUI
 
-/// The window: the mode switch in the toolbar, the notice banner, then Easy or Advanced.
-struct ContentView: View {
-    @EnvironmentObject private var tools: ToolManager
-    @AppStorage("mode") private var mode = "easy"
-    @StateObject private var form = LinkForm()
-    /// Jobs whose "Details" log is open. Kept here so it survives progress updates, a mode
-    /// switch and the Advanced layout changing between one and two columns.
-    @State private var expanded: Set<UUID> = []
-
-    private var isEasy: Bool { mode != "advanced" }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            NoticeBanner(isEasy: isEasy)
-            if isEasy {
-                EasyView(expanded: $expanded) { mode = "advanced" }
-            } else {
-                AdvancedView(expanded: $expanded)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .foregroundStyle(Color.ink)
-        .background(Color.bay)
-        .environmentObject(form)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Picker("View", selection: $mode) {
-                    Text("Easy").tag("easy")
-                    Text("Advanced").tag("advanced")
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-            }
-        }
-        .onChange(of: mode) { WindowSizer.apply(mode: mode, animate: true) }
-        .onAppear {
-            // The window does not exist yet while its content is appearing.
-            DispatchQueue.main.async { WindowSizer.apply(mode: mode, animate: false) }
-        }
-        .task {
-            await tools.refresh(checkLatest: false)
-            // Easy mode installs and updates the tools by itself; Advanced only reports.
-            if isEasy {
-                await tools.autoUpdate()
-            } else {
-                await tools.refresh(checkLatest: true)
-            }
-        }
-    }
-}
-
 // MARK: - Notice
 
 /// The "Updating app" banner: what the tools are doing, or what went wrong with them.
@@ -129,7 +77,7 @@ struct NoticeBanner: View {
 
 // MARK: - Easy
 
-/// Easy mode: a link box and one button, running with the saved defaults.
+/// The GetVideo page: a link box and one button, running with the saved defaults.
 struct EasyView: View {
     @EnvironmentObject private var settings: SettingsStore
     @Binding var expanded: Set<UUID>

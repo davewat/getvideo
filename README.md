@@ -27,11 +27,12 @@ Every video runs the same three stages:
 2. **Convert.** HandBrake re-encodes it with a preset so it plays anywhere and takes less space.
 3. **Save.** The finished file moves to your folder, named after the video.
 
-**Easy mode** is the default: paste a link and press **Get video**. It uses sensible settings
-(up to 1080p, HandBrake's Fast 1080p30 preset, an mp4 in your Downloads folder).
+**GetVideo** is the page the app opens on: paste a link and press **Get video**. It uses sensible
+settings (up to 1080p, HandBrake's Fast 1080p30 preset, an mp4 in your Downloads folder).
 
-**Advanced mode** shows every download and conversion option. Press **Save as default** and Easy
-mode uses your settings from then on.
+**Advanced**, in the sidebar, shows every download and conversion option, the queue and the tools.
+Press **Save as default** and the GetVideo page uses your settings from then on. (In the browser
+version these are the Easy and Advanced modes, switched at the top of the page.)
 
 On first start GetVideo downloads the tools it needs (yt-dlp, HandBrakeCLI and ffmpeg) into its
 own folder and keeps them up to date. It runs entirely on your Mac: no account, no upload, no

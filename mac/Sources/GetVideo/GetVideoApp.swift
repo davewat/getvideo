@@ -33,13 +33,13 @@ struct GetVideoApp: App {
                 .environmentObject(settings)
                 .environmentObject(tools)
                 .environmentObject(queue)
-                .frame(minWidth: 460, minHeight: 420)
+                .frame(minWidth: 720, minHeight: 480)
                 .onAppear {
                     delegate.queue = queue
                     DevHooks.start(settings: settings, queue: queue)
                 }
         }
-        .defaultSize(width: 720, height: 640)
+        .defaultSize(width: 940, height: 680)
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .newItem) {} // one window: no "New Window"

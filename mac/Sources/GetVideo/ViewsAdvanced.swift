@@ -1,34 +1,20 @@
 import SwiftUI
 
-/// Advanced mode: every option on the left, the queue and the tools on the right. Below 900pt
-/// the two columns stack into one.
+/// The Advanced page: the full form, then the queue, then the tools, stacked in one column.
 struct AdvancedView: View {
     @Binding var expanded: Set<UUID>
-    // Held here, not in the form, so "More options" stays open when the layout changes shape.
     @State private var moreDownload = false
     @State private var moreConvert = false
 
     var body: some View {
-        GeometryReader { geo in
-            if geo.size.width >= 900 {
-                HStack(alignment: .top, spacing: 0) {
-                    ScrollView {
-                        form.padding(.leading, 20).padding(.trailing, 10).padding(.vertical, 20)
-                    }
-                    .frame(width: geo.size.width * 0.58)
-                    ScrollView {
-                        sidebar.padding(.leading, 10).padding(.trailing, 20).padding(.vertical, 20)
-                    }
-                }
-            } else {
-                ScrollView {
-                    VStack(spacing: 20) {
-                        form
-                        sidebar
-                    }
-                    .padding(20)
-                }
+        ScrollView {
+            VStack(spacing: 20) {
+                form
+                sidebar
             }
+            .frame(maxWidth: 980)
+            .frame(maxWidth: .infinity)
+            .padding(20)
         }
     }
 
