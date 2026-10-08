@@ -163,3 +163,12 @@ nav a { white-space: nowrap; }
 .giants h3 { text-transform: none; font-size: 30px; letter-spacing: .01em; }
 .giants a { font: 14px var(--mono); }
 @media (max-width: 720px) { nav a[href="#giants"] { display: none; } }
+
+/* ---- other platforms ---- */
+.alt { margin-top: 14px; font-size: 15px; color: var(--soft); }
+.tag {
+  display: inline-block; vertical-align: middle; margin-left: 10px; padding: 5px 10px 4px; border: 2px solid var(--bar-yellow);
+  border-radius: 4px; font-size: 16px; letter-spacing: .12em; line-height: 1; color: var(--bar-yellow);
+}
+.others { margin-top: 36px; display: grid; gap: 3px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.others article { display: grid; gap: 12px; align-content: start; padding: 26px 24px 24px; background: var(--deck); border-top: 9px solid var(--line); min-width: 0; }

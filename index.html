@@ -35,6 +35,7 @@
           <span class="meta"><span id="version">Latest release</span> · macOS 14 or later · MIT licence</span>
         </div>
         <p class="edu">For educational use only.</p>
+        <p class="alt">Made for the Mac. <a href="#other">Untested builds for Windows and Ubuntu</a> are also available.</p>
       </div>
 
       <!-- A working miniature of the app's Easy view; demo.js plays one job through it. -->
@@ -172,6 +173,23 @@
         </li>
       </ol>
       <p class="note">Prefer to run it in your browser? <a href="https://github.com/davewat/getvideo/releases/latest/download/getvideo-mac-go.zip">Download the Mac Go version</a> and follow the <a href="https://github.com/davewat/getvideo#install">instructions in the README</a>.</p>
+    </section>
+    <section class="block" id="other">
+      <h2>Windows and Ubuntu <span class="tag">untested</span></h2>
+      <p class="intro">GetVideo is made for the Mac, and the Mac is the only place it has been tested. The browser version is also built for Windows and Ubuntu, for anyone who wants to try it. These builds have never been run on a real machine, so expect rough edges, and please <a href="https://github.com/davewat/getvideo/issues">report what you find</a>. Both are for 64-bit Intel or AMD computers.</p>
+      <div class="others">
+        <article>
+          <h3>Windows</h3>
+          <p><a href="https://github.com/davewat/getvideo/releases/latest/download/getvideo-windows-go.zip">Download the Windows Go version</a>, unzip it and double-click <code>getvideo.exe</code>. If Windows shows "Windows protected your PC", click <b>More info</b>, then <b>Run anyway</b>. Your browser opens the app; keep the black window open while you use it.</p>
+        </article>
+        <article>
+          <h3>Ubuntu</h3>
+          <p>Install HandBrake first, because GetVideo cannot install it on Linux. <a href="https://github.com/davewat/getvideo/releases/latest/download/getvideo-ubuntu-go.tar.gz">Download the Ubuntu Go version</a>, then in a terminal:</p>
+          <pre><code>sudo apt install handbrake-cli
+tar -xzf ~/Downloads/getvideo-ubuntu-go.tar.gz
+./getvideo</code></pre>
+        </article>
+      </div>
     </section>
   </main>
 
