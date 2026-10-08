@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GetVideo: paste a link, get a file</title>
+  <meta name="description" content="GetVideo is a free Mac app that downloads a video with yt-dlp, converts it with HandBrake and saves it to a folder you choose.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="demo.js"></script>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="#top" aria-label="GetVideo">
+      <span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+      <span class="wordmark">GetVideo</span>
+    </a>
+    <nav>
+      <a href="#how">How it works</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/davewat/getvideo">GitHub</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-copy">
+        <h1>Paste a link.<br>Get a file.</h1>
+        <p class="lede">GetVideo is a free Mac app that downloads a video, converts it with HandBrake and saves it to the folder you choose. One paste, no settings to learn.</p>
+        <div class="cta">
+          <a class="btn primary" href="https://github.com/davewat/getvideo/releases/latest">Download for Mac</a>
+          <span class="meta"><span id="version">Latest release</span> · Apple Silicon and Intel · MIT licence</span>
+        </div>
+      </div>
+
+      <!-- A working miniature of the app's Easy view; demo.js plays one job through it. -->
+      <div class="demo" aria-label="Demonstration of GetVideo handling one video">
+        <div class="demo-bar"><span></span><span></span><span></span><b>127.0.0.1:8765</b></div>
+        <div class="demo-body">
+          <div class="label">Video link</div>
+          <div class="demo-input" id="demo-url"><span class="caret"></span></div>
+          <div class="plan">
+            <span data-stage="download"><i class="swatch"></i><b>Download</b> up to 1080p</span>
+            <span data-stage="convert"><i class="swatch"></i><b>Convert</b> Fast 1080p30, mp4</span>
+            <span data-stage="save"><i class="swatch"></i><b>Save</b> ~/Downloads</span>
+          </div>
+          <div class="demo-btn" id="demo-btn">Get video</div>
+          <div class="demo-job" id="demo-job">
+            <div class="job-title">Big Buck Bunny</div>
+            <div class="job-status" id="demo-status">Waiting</div>
+            <div class="track">
+              <div class="seg" data-stage="download"><div class="seg-bar"><i></i></div><span>Download</span></div>
+              <div class="seg" data-stage="convert"><div class="seg-bar"><i></i></div><span>Convert</span></div>
+              <div class="seg" data-stage="save"><div class="seg-bar"><i></i></div><span>Save</span></div>
+            </div>
+            <div class="demo-file" id="demo-file"><b>Big Buck Bunny.mp4</b><span>~/Downloads/</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="bars strip" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+
+    <section class="block" id="how">
+      <h2>Three stages, one paste</h2>
+      <p class="intro">Every video runs the same timeline. You watch it move; you don't have to steer it.</p>
+      <div class="stages">
+        <article data-stage="download">
+          <h3><i class="swatch"></i>Download</h3>
+          <p>yt-dlp fetches the best video and audio up to the quality you set, then joins them into one file.</p>
+          <p class="spec">Quality cap · subtitles · audio only · SponsorBlock</p>
+        </article>
+        <article data-stage="convert">
+          <h3><i class="swatch"></i>Convert</h3>
+          <p>HandBrake re-encodes it with a preset, so it plays on the device you have in mind and takes less space.</p>
+          <p class="spec">Every HandBrake preset · H.264, H.265, AV1 · or skip it</p>
+        </article>
+        <article data-stage="save">
+          <h3><i class="swatch"></i>Save</h3>
+          <p>The finished file moves to your folder, named after the video. Nothing is left behind in temporary storage.</p>
+          <p class="spec">Any folder · your file name · Show in Finder</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="block split">
+      <div>
+        <h2>Easy by default</h2>
+        <p>Open the app, paste a link, press <b>Get video</b>. Sensible settings are already chosen: up to 1080p, HandBrake's Fast 1080p30 preset, an mp4 in your Downloads folder.</p>
+        <p>Paste several links and they queue up, one at a time, with live progress for each.</p>
+      </div>
+      <div>
+        <h2>Advanced when you want it</h2>
+        <p>Switch to Advanced for the full set of yt-dlp and HandBrake options, plus a box for any extra arguments.</p>
+        <p>Press <b>Save as default</b> and Easy mode uses your settings from then on.</p>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>It sets up its own tools</h2>
+      <p class="intro">On first start GetVideo downloads the three programs it relies on, and keeps them current each time it opens. They live in the app's own folder, not system-wide.</p>
+      <table>
+        <thead><tr><th>Tool</th><th>What it does</th><th>Where it comes from</th></tr></thead>
+        <tbody>
+          <tr><td>yt-dlp</td><td>Downloads the video</td><td>Official GitHub release, checksum verified</td></tr>
+          <tr><td>HandBrakeCLI</td><td>Converts the video</td><td>Official HandBrake disk image</td></tr>
+          <tr><td>ffmpeg</td><td>Joins video and audio</td><td>Static macOS build from ffmpeg.martin-riedl.de</td></tr>
+        </tbody>
+      </table>
+      <p class="note">GetVideo runs on your Mac and shows its page at <code>127.0.0.1</code>, reachable only from your own computer. No account, no upload, no tracking.</p>
+    </section>
+
+    <section class="block" id="install">
+      <h2>Install</h2>
+      <ol class="steps">
+        <li>
+          <h3>Download and unzip</h3>
+          <p>Get the latest zip from the <a href="https://github.com/davewat/getvideo/releases/latest">releases page</a> and double-click it. You get one file named <code>getvideo</code>.</p>
+        </li>
+        <li>
+          <h3>Allow it to run</h3>
+          <p>The app is not notarized by Apple yet, so macOS blocks it until you clear the download flag. In Terminal:</p>
+          <pre><code>xattr -d com.apple.quarantine ~/Downloads/getvideo</code></pre>
+        </li>
+        <li>
+          <h3>Start it</h3>
+          <pre><code>~/Downloads/getvideo</code></pre>
+          <p>Your browser opens the app. The first start takes about a minute while the tools install. Keep the Terminal window open while you use it.</p>
+        </li>
+      </ol>
+    </section>
+  </main>
+
+  <footer>
+    <span class="bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+    <p>GetVideo is open source under the MIT licence. <a href="https://github.com/davewat/getvideo">Source on GitHub</a>.</p>
+    <p class="fine">Download only videos you have the right to keep. GetVideo is not affiliated with YouTube, yt-dlp, HandBrake or FFmpeg.</p>
+  </footer>
+</body>
+</html>
