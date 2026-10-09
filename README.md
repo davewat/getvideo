@@ -25,7 +25,7 @@ Every video runs the same three stages:
 
 1. **Download.** yt-dlp fetches the video and audio, up to the quality you set.
 2. **Convert.** HandBrake re-encodes it with a preset so it plays anywhere and takes less space.
-3. **Save.** The finished file moves to your folder, named after the video.
+3. **Save.** The finished file moves to your working folder, named after the video.
 
 **GetVideo** is the page the app opens on: paste a link and press **Get video**. It uses sensible
 settings (up to 1080p, HandBrake's Fast 1080p30 preset, an mp4 in your Downloads folder).
@@ -33,6 +33,11 @@ settings (up to 1080p, HandBrake's Fast 1080p30 preset, an mp4 in your Downloads
 **Advanced**, in the sidebar, shows every download and conversion option, the queue and the tools.
 Press **Save as default** and the GetVideo page uses your settings from then on. (In the browser
 version these are the Easy and Advanced modes, switched at the top of the page.)
+
+The **working folder** is where finished videos are saved: your Downloads folder unless you choose
+another one under **Advanced**. While a video is being made, yt-dlp and HandBrake also keep their
+temporary files in a hidden folder inside it, which is removed when the video finishes. Choose a
+folder on a drive with plenty of free space.
 
 On first start GetVideo downloads the tools it needs (yt-dlp, HandBrakeCLI and ffmpeg) into its
 own folder and keeps them up to date. It runs entirely on your Mac: no account, no upload, no

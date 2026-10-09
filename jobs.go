@@ -65,8 +65,17 @@ type queue struct {
 	stop chan struct{}
 }
 
+// workPrefix starts the name of a job's temporary folder inside its working folder.
+const workPrefix = ".getvideo-"
+
+// workDirFor is where one job's temporary files live: a hidden folder inside the working folder
+// the video is saved to. yt-dlp downloads there and HandBrake converts there, so the finished file
+// is moved a few inches (a rename on the same disk, never a copy) and a download never fills the
+// system disk when the working folder is on a bigger drive.
+func workDirFor(j *Job) string { return filepath.Join(j.Output.Dir, workPrefix+j.ID) }
+
 func newQueue(dir string, t *tools) (*queue, error) {
-	if err := os.MkdirAll(filepath.Join(dir, "tmp"), 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
 	q := &queue{
@@ -84,16 +93,13 @@ func newQueue(dir string, t *tools) (*queue, error) {
 		switch j.Status {
 		case StDownloading, StTranscoding, StMoving:
 			j.Status, j.Error = StFailed, "interrupted by restart"
+			_ = os.RemoveAll(workDirFor(j)) // what it left behind in its working folder
 		case StQueued:
 			// stays queued and resumes
 		}
 	}
-	// Leftover work dirs belong to jobs that no longer exist.
-	if es, err := os.ReadDir(filepath.Join(dir, "tmp")); err == nil {
-		for _, e := range es {
-			_ = os.RemoveAll(filepath.Join(dir, "tmp", e.Name()))
-		}
-	}
+	// Earlier versions kept temporary files here instead of in the working folder.
+	_ = os.RemoveAll(filepath.Join(dir, "tmp"))
 	go q.run()
 	q.poke()
 	return q, nil
@@ -325,7 +331,7 @@ func (q *queue) process(j *Job) {
 		q.mu.Unlock()
 	}()
 
-	work := filepath.Join(q.dir, "tmp", j.ID)
+	work := workDirFor(j)
 	defer os.RemoveAll(work)
 	err := q.pipeline(ctx, j, work)
 
@@ -352,10 +358,10 @@ func (q *queue) pipeline(ctx context.Context, j *Job, work string) error {
 		return errors.New("HandBrakeCLI is not installed (Tools panel)")
 	}
 	if err := os.MkdirAll(j.Output.Dir, 0o755); err != nil {
-		return fmt.Errorf("output folder: %w", err)
+		return fmt.Errorf("working folder: %w", err)
 	}
 	if err := os.MkdirAll(work, 0o755); err != nil {
-		return err
+		return fmt.Errorf("working folder: %w", err)
 	}
 
 	files, err := q.download(ctx, j, work)

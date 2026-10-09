@@ -231,15 +231,17 @@ struct AdvancedForm: View {
 
     @ViewBuilder private var save: some View {
         let o = $settings.draft.output
-        Field("Folder") {
+        Field("Working folder") {
             HStack(spacing: 8) {
                 TextField("", text: o.dir, prompt: Text("Defaults to ~/Downloads"))
                     .textFieldStyle(.roundedBorder)
                     .autocorrectionDisabled()
-                    .accessibilityLabel("Folder")
+                    .accessibilityLabel("Working folder")
                 Button("Choose folder", action: chooseFolder)
             }
         }
+        Text("Videos are saved here. Downloads and conversions also keep their temporary files here, in a hidden folder that is removed when each video finishes.")
+            .hint()
         TextBox("File name (no extension; blank = video title)", text: o.filename)
         switches {
             SwitchRow("Also keep the original download", isOn: o.keepSource)

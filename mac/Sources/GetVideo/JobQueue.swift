@@ -18,7 +18,7 @@ final class JobQueue: ObservableObject {
 
     private let tools: ToolManager
     private let jobsFile: URL
-    private let workDir: URL
+    private let legacyWorkDir: URL
     /// The loop that works through queued jobs; nil while there is nothing to do.
     private var runner: Task<Void, Never>?
     /// The job being processed and the Task running its pipeline (cancelling it stops the process).
@@ -26,10 +26,11 @@ final class JobQueue: ObservableObject {
     private var runningTask: Task<Void, Error>?
     private var stopped = false
 
-    init(tools: ToolManager, jobsFile: URL = AppPaths.jobsFile, workDir: URL = AppPaths.work) {
+    /// `legacyWorkDir` is where earlier versions kept temporary files; it is only ever emptied.
+    init(tools: ToolManager, jobsFile: URL = AppPaths.jobsFile, legacyWorkDir: URL = AppPaths.work) {
         self.tools = tools
         self.jobsFile = jobsFile
-        self.workDir = workDir
+        self.legacyWorkDir = legacyWorkDir
         let fm = FileManager.default
 
         if let data = try? Data(contentsOf: jobsFile), let saved = try? JSONDecoder().decode([Job].self, from: data) {
@@ -37,6 +38,8 @@ final class JobQueue: ObservableObject {
         }
         var changed = false
         for i in jobs.indices where [.downloading, .converting, .saving].contains(jobs[i].status) {
+            // What it left behind in its working folder.
+            try? fm.removeItem(at: Self.workFolder(for: jobs[i].id, in: Self.outputDir(jobs[i].settings.output.dir)))
             jobs[i].status = .failed
             jobs[i].error = Self.interruptedMessage
             jobs[i].speed = ""
@@ -45,11 +48,7 @@ final class JobQueue: ObservableObject {
         }
         if changed { persist() }
 
-        // Leftover work folders belong to jobs that are no longer running.
-        for old in (try? fm.contentsOfDirectory(at: workDir, includingPropertiesForKeys: nil)) ?? [] {
-            try? fm.removeItem(at: old)
-        }
-        try? fm.createDirectory(at: workDir, withIntermediateDirectories: true)
+        try? fm.removeItem(at: legacyWorkDir)
         startRunner()
     }
 
@@ -135,7 +134,8 @@ final class JobQueue: ObservableObject {
     }
 
     private func process(_ id: UUID) async {
-        let work = workDir.appendingPathComponent(id.uuidString, isDirectory: true)
+        let outDir = Self.outputDir(index(id).map { jobs[$0].settings.output.dir } ?? "")
+        let work = Self.workFolder(for: id, in: outDir)
         let task = Task { try await self.pipeline(id, work: work) }
         runningID = id
         runningTask = task
@@ -187,9 +187,13 @@ final class JobQueue: ObservableObject {
         do {
             try fm.createDirectory(at: outDir, withIntermediateDirectories: true)
         } catch {
-            throw JobError(message: "Could not create the output folder: \(error.localizedDescription)")
+            throw JobError(message: "Could not create the working folder: \(error.localizedDescription)")
         }
-        try fm.createDirectory(at: work, withIntermediateDirectories: true)
+        do {
+            try fm.createDirectory(at: work, withIntermediateDirectories: true)
+        } catch {
+            throw JobError(message: "Could not create temporary files in the working folder: \(error.localizedDescription)")
+        }
 
         let files = try await download(id, url: job.url, options: settings.download, work: work)
         if files.isEmpty { throw JobError(message: "yt-dlp finished but reported no output file") }
@@ -219,8 +223,16 @@ final class JobQueue: ObservableObject {
         if let i = index(id) { jobs[i].outputs = outputs }
     }
 
+    /// A job's temporary folder: hidden, inside the working folder the video is saved to. yt-dlp
+    /// downloads there and HandBrake converts there, so the finished file is moved with a rename on
+    /// the same disk, and a big download never fills the system disk when the working folder is on
+    /// a bigger drive.
+    static func workFolder(for id: UUID, in outDir: URL) -> URL {
+        outDir.appendingPathComponent(".getvideo-\(id.uuidString)", isDirectory: true)
+    }
+
     /// "" means the Downloads folder; a leading `~` is the home folder.
-    private static func outputDir(_ dir: String) -> URL {
+    static func outputDir(_ dir: String) -> URL {
         let d = dir.trimmingCharacters(in: .whitespacesAndNewlines)
         if d.isEmpty { return AppPaths.downloads }
         return URL(fileURLWithPath: (d as NSString).expandingTildeInPath, isDirectory: true)

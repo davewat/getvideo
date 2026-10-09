@@ -104,7 +104,7 @@ function field(section, f) {
           const { path, message } = await api.pickFolder()
           if (path) { input.value = path; set(path) }
           else if (message) alert(message)
-        } }, 'Choose folder')))
+        } }, 'Choose folder')), f.hint ? h('span', { class: 'hint' }, f.hint) : null)
       break
     default: // text, number
       input = h('input', { type: f.type === 'number' ? 'number' : 'text', min: f.type === 'number' ? 0 : null,

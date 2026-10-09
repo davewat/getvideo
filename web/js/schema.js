@@ -81,7 +81,8 @@ export const sections = [
   },
   {
     key: 'output', title: 'Save', tool: 'on this Mac', fields: [
-      { key: 'dir', label: 'Folder', type: 'folder', placeholder: 'Defaults to ~/Downloads', wide: true },
+      { key: 'dir', label: 'Working folder', type: 'folder', placeholder: 'Defaults to ~/Downloads', wide: true,
+        hint: 'Videos are saved here. Downloads and conversions also keep their temporary files here, in a hidden folder that is removed when each video finishes.' },
       { key: 'filename', label: 'File name (no extension; blank = video title)', type: 'text', wide: true, transient: true },
       { key: 'keepSource', label: 'Also keep the original download', type: 'check' },
       { key: 'overwrite', label: 'Overwrite an existing file', type: 'check' },

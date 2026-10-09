@@ -8,7 +8,7 @@ final class JobQueueTests: XCTestCase {
         let tools: ToolManager
         var jobsFile: URL { dir.appendingPathComponent("jobs.json") }
         var work: URL { dir.appendingPathComponent("work", isDirectory: true) }
-        @MainActor func queue() -> JobQueue { JobQueue(tools: tools, jobsFile: jobsFile, workDir: work) }
+        @MainActor func queue() -> JobQueue { JobQueue(tools: tools, jobsFile: jobsFile, legacyWorkDir: work) }
     }
 
     /// A queue on temp folders with an empty tools folder, so every job that runs fails at once.
@@ -21,6 +21,34 @@ final class JobQueueTests: XCTestCase {
         let start = Date()
         while !done(), Date().timeIntervalSince(start) < seconds { try await Task.sleep(nanoseconds: 20_000_000) }
         XCTAssertTrue(done(), "timed out")
+    }
+
+    /// The working folder is where the video is saved AND where temporary files are kept
+    /// (2026-10-09: before, they lived in the app's own data folder).
+    func testTemporaryFolderIsInsideTheWorkingFolder() {
+        let id = UUID()
+        let folder = URL(fileURLWithPath: "/Volumes/Big/Videos", isDirectory: true)
+        XCTAssertEqual(JobQueue.workFolder(for: id, in: folder).path, "/Volumes/Big/Videos/.getvideo-\(id.uuidString)")
+    }
+
+    /// A job interrupted by quitting must not leave its temporary folder in the user's folder, and
+    /// must not touch the user's own files there.
+    func testInterruptedJobsTemporaryFolderIsRemoved() throws {
+        let env = try makeEnv()
+        let folder = env.dir.appendingPathComponent("videos", isDirectory: true)
+        var job = Job(url: "https://ok.example/v", title: "t", settings: Settings())
+        job.settings.output.dir = folder.path
+        job.status = .downloading
+        let leftover = JobQueue.workFolder(for: job.id, in: folder)
+        try FileManager.default.createDirectory(at: leftover, withIntermediateDirectories: true)
+        let mine = folder.appendingPathComponent("My Video.mp4")
+        try Data("x".utf8).write(to: mine)
+        try JSONEncoder().encode([job]).write(to: env.jobsFile)
+
+        let q = env.queue()
+        XCTAssertEqual(q.jobs.first?.status, .failed)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: leftover.path), "temporary folder is left behind")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: mine.path), "a user file was removed")
     }
 
     func testAddValidates() throws {
@@ -47,7 +75,7 @@ final class JobQueueTests: XCTestCase {
         XCTAssertEqual(q.jobs.map(\.title), q.jobs.map(\.url))
         try await wait { q.jobs.allSatisfy { $0.status == .failed } }
         XCTAssertEqual(q.jobs[0].error, "yt-dlp is not installed (see Tools)")
-        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: env.work.path), [], "work folder is cleaned up")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: env.work.path), "the app's own work folder is no longer used")
 
         // Saved on every status change.
         let saved = try JSONDecoder().decode([Job].self, from: Data(contentsOf: env.jobsFile))
@@ -148,7 +176,7 @@ final class EndToEndTests: XCTestCase {
         XCTAssertTrue(tools.presets.contains { $0.presets.contains("Fast 480p30") }, "preset list: \(tools.presets.map(\.category))")
 
         let queue = JobQueue(tools: tools, jobsFile: dir.appendingPathComponent("jobs.json"),
-                             workDir: dir.appendingPathComponent("work", isDirectory: true))
+                             legacyWorkDir: dir.appendingPathComponent("work", isDirectory: true))
         var s = Settings()
         s.download.maxHeight = 360
         s.transcode.preset = "Fast 480p30"
@@ -174,6 +202,8 @@ final class EndToEndTests: XCTestCase {
         let size = (try FileManager.default.attributesOfItem(atPath: file)[.size] as? Int) ?? 0
         XCTAssertGreaterThan(size, 10_000)
         XCTAssertNotEqual(job.title, job.url, "yt-dlp reports the title")
+        let left = try FileManager.default.contentsOfDirectory(atPath: out.path)
+        XCTAssertEqual(left.count, 1, "only the finished video remains in the working folder: \(left)")
         XCTAssertTrue(seen.contains(.downloading) && seen.contains(.converting), "\(seen)")
     }
 }
