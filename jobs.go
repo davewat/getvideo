@@ -43,6 +43,7 @@ type Job struct {
 	ETA       string           `json:"eta,omitempty"`
 	Error     string           `json:"error,omitempty"`
 	Outputs   []string         `json:"outputs,omitempty"`
+	Downloads []string         `json:"downloads,omitempty"` // downloaded files kept for a conversion that has not finished
 	Log       []string         `json:"log"`
 	Download  DownloadOptions  `json:"download"`
 	Transcode TranscodeOptions `json:"transcode"`
@@ -74,6 +75,28 @@ const workPrefix = ".getvideo-"
 // system disk when the working folder is on a bigger drive.
 func workDirFor(j *Job) string { return filepath.Join(j.Output.Dir, workPrefix+j.ID) }
 
+// keepsDownload is true when a failed or canceled job leaves its downloaded file in the working
+// folder, so "Try again" continues from the conversion instead of downloading again.
+func keepsDownload(j *Job) bool {
+	return j.Download.KeepDownload && !j.Transcode.Skip && !j.Download.AudioOnly
+}
+
+// discardWork empties a job's temporary folder. When the job keeps its download only HandBrake's
+// half-written output goes; everything else stays so the job can continue.
+func discardWork(j *Job) {
+	work := workDirFor(j)
+	if !keepsDownload(j) {
+		_ = os.RemoveAll(work)
+		return
+	}
+	if outs, _ := filepath.Glob(filepath.Join(work, "out.*")); len(outs) > 0 {
+		for _, f := range outs {
+			_ = os.Remove(f)
+		}
+	}
+	_ = os.Remove(work) // only succeeds when nothing is left in it
+}
+
 func newQueue(dir string, t *tools) (*queue, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
@@ -93,7 +116,7 @@ func newQueue(dir string, t *tools) (*queue, error) {
 		switch j.Status {
 		case StDownloading, StTranscoding, StMoving:
 			j.Status, j.Error = StFailed, "interrupted by restart"
-			_ = os.RemoveAll(workDirFor(j)) // what it left behind in its working folder
+			discardWork(j) // what it left behind in its working folder
 		case StQueued:
 			// stays queued and resumes
 		}
@@ -241,6 +264,7 @@ func (q *queue) remove(id string) bool {
 				return false
 			}
 			q.jobs = append(q.jobs[:i], q.jobs[i+1:]...)
+			_ = os.RemoveAll(workDirFor(j)) // a kept download goes with the job
 			q.persist()
 			b, _ := json.Marshal(map[string]string{"id": id, "removed": "true"})
 			for ch := range q.subs {
@@ -332,11 +356,18 @@ func (q *queue) process(j *Job) {
 	}()
 
 	work := workDirFor(j)
-	defer os.RemoveAll(work)
 	err := q.pipeline(ctx, j, work)
+	if err == nil {
+		_ = os.RemoveAll(work)
+	} else {
+		discardWork(j) // keeps the download for "Try again" when the job asked for that
+	}
 
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	if err == nil {
+		j.Downloads = nil
+	}
 	switch {
 	case err == nil:
 		q.finishLocked(j, StDone, "")
@@ -364,17 +395,29 @@ func (q *queue) pipeline(ctx context.Context, j *Job, work string) error {
 		return fmt.Errorf("working folder: %w", err)
 	}
 
-	files, err := q.download(ctx, j, work)
-	if err != nil {
-		return err
-	}
-	if len(files) == 0 {
-		return errors.New("yt-dlp finished but reported no output file")
+	files := keptDownloads(j)
+	if files != nil {
+		q.logLine(j, "Using the download kept from last time; going straight to the conversion.")
+	} else {
+		var err error
+		if files, err = q.download(ctx, j, work); err != nil {
+			return err
+		}
+		if len(files) == 0 {
+			return errors.New("yt-dlp finished but reported no output file")
+		}
+		if keepsDownload(j) { // tracked in the job (and saved), so it survives a crash or a quit
+			q.update(j, false, func(j *Job) { j.Downloads = files })
+			q.mu.Lock()
+			q.persist()
+			q.mu.Unlock()
+		}
 	}
 	var outs []string
 	for i, src := range files {
 		final := src
 		if transcode {
+			var err error
 			if final, err = q.transcode(ctx, j, src, work); err != nil {
 				return err
 			}
@@ -401,9 +444,35 @@ func (q *queue) pipeline(ctx context.Context, j *Job, work string) error {
 			}
 			outs = append(outs, sdst)
 		}
+		// This file is finished: it is no longer waiting for a conversion.
+		q.update(j, false, func(j *Job) { j.Downloads = withoutPath(j.Downloads, src) })
 	}
 	q.update(j, false, func(j *Job) { j.Outputs = outs })
 	return nil
+}
+
+// keptDownloads returns the downloads a previous attempt left behind, or nil when there are none
+// or any of them has gone, in which case the video is downloaded again.
+func keptDownloads(j *Job) []string {
+	if len(j.Downloads) == 0 {
+		return nil
+	}
+	for _, p := range j.Downloads {
+		if st, err := os.Stat(p); err != nil || st.IsDir() {
+			return nil
+		}
+	}
+	return append([]string(nil), j.Downloads...)
+}
+
+func withoutPath(paths []string, p string) []string {
+	var out []string
+	for _, x := range paths {
+		if x != p {
+			out = append(out, x)
+		}
+	}
+	return out
 }
 
 // unsafeName covers what macOS, Linux and Windows each refuse in a file name.
@@ -524,6 +593,20 @@ func (q *queue) download(ctx context.Context, j *Job, work string) ([]string, er
 	return files, nil
 }
 
+// scanLength asks HandBrake how long a video is.
+func (q *queue) scanLength(ctx context.Context, src string) (float64, error) {
+	var out strings.Builder
+	err := runCmd(ctx, q.tools.path(toolHandbrake), []string{"-i", src, "--scan"}, func(l string) { out.WriteString(l + "\n") })
+	if err != nil {
+		return 0, fmt.Errorf("HandBrakeCLI could not read the video's length: %w", err)
+	}
+	d, ok := scanDuration(out.String())
+	if !ok {
+		return 0, errors.New("HandBrakeCLI did not report the video's length, so it cannot be shortened")
+	}
+	return d, nil
+}
+
 var hbProgress = regexp.MustCompile(`Encoding: task \d+ of \d+, ([\d.]+) %(?: \(([\d.]+) fps, avg [\d.]+ fps, ETA (\S+)\))?`)
 
 func (q *queue) transcode(ctx context.Context, j *Job, src, work string) (string, error) {
@@ -535,6 +618,21 @@ func (q *queue) transcode(ctx context.Context, j *Job, src, work string) (string
 	}
 	dst := filepath.Join(work, "out."+t.Container)
 	args := append([]string{"-i", src, "-o", dst}, opts...)
+	if t.TrimMode != "" {
+		var total float64
+		if t.needsScan() {
+			var err error
+			if total, err = q.scanLength(ctx, src); err != nil {
+				return "", err
+			}
+		}
+		if start, length, ok := t.trimWindow(total); ok {
+			args = append(args, trimArgs(start, length)...)
+			q.logLine(j, fmt.Sprintf("Shortening to %s, starting at %s.", clockString(length), clockString(start)))
+		} else {
+			q.logLine(j, "The video is already no longer than the length asked for; keeping all of it.")
+		}
+	}
 
 	q.update(j, false, func(j *Job) { j.Status, j.Percent, j.Speed, j.ETA = StTranscoding, 0, "", "" })
 	err := runCmd(ctx, q.tools.path(toolHandbrake), args, func(l string) {
@@ -555,6 +653,11 @@ func (q *queue) transcode(ctx context.Context, j *Job, src, work string) (string
 	})
 	if err != nil {
 		return "", fmt.Errorf("HandBrakeCLI: %w", err)
+	}
+	// HandBrake can finish normally without writing anything, for instance when it does not
+	// understand an option. (2026-10-09: this surfaced as "move ...: no such file or directory".)
+	if st, err := os.Stat(dst); err != nil || st.Size() == 0 {
+		return "", errors.New("HandBrakeCLI finished without creating a video. Check the Convert settings, especially any extra arguments, and see the log.")
 	}
 	return dst, nil
 }

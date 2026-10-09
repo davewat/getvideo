@@ -1,5 +1,12 @@
 import Foundation
 
+extension KeyedDecodingContainer {
+    /// Replaces `value` with what the file holds for `key`, if it holds anything.
+    func update<T: Decodable>(_ value: inout T, _ key: Key) throws {
+        if let v = try decodeIfPresent(T.self, forKey: key) { value = v }
+    }
+}
+
 // Option structs mirror the Go version's (options.go); the argument builders live in Args.swift.
 
 struct DownloadOptions: Codable, Equatable {
@@ -10,6 +17,7 @@ struct DownloadOptions: Codable, Equatable {
     var formatSort = ""           // -S
     var customFormat = ""         // -f, overrides the quality choice
     var noPlaylist = true
+    var keepDownload = true       // keep the download until it is converted, so a failed conversion can resume
     var subtitles = false
     var autoSubs = false
     var subLangs = "en"
@@ -21,6 +29,33 @@ struct DownloadOptions: Codable, Equatable {
     var proxy = ""
     var sponsorBlock: [String] = []
     var extraArgs = ""
+}
+
+/// Reads files saved by earlier versions: anything missing keeps its default.
+extension DownloadOptions {
+    init(from decoder: Decoder) throws {
+        self.init()
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        try c.update(&maxHeight, .maxHeight)
+        try c.update(&audioOnly, .audioOnly)
+        try c.update(&audioFormat, .audioFormat)
+        try c.update(&mergeContainer, .mergeContainer)
+        try c.update(&formatSort, .formatSort)
+        try c.update(&customFormat, .customFormat)
+        try c.update(&noPlaylist, .noPlaylist)
+        try c.update(&keepDownload, .keepDownload)
+        try c.update(&subtitles, .subtitles)
+        try c.update(&autoSubs, .autoSubs)
+        try c.update(&subLangs, .subLangs)
+        try c.update(&embedSubs, .embedSubs)
+        try c.update(&embedMetadata, .embedMetadata)
+        try c.update(&embedThumbnail, .embedThumbnail)
+        try c.update(&cookiesBrowser, .cookiesBrowser)
+        try c.update(&rateLimit, .rateLimit)
+        try c.update(&proxy, .proxy)
+        try c.update(&sponsorBlock, .sponsorBlock)
+        try c.update(&extraArgs, .extraArgs)
+    }
 }
 
 struct TranscodeOptions: Codable, Equatable {
@@ -42,7 +77,42 @@ struct TranscodeOptions: Codable, Equatable {
     var allAudio = false
     var allSubs = false
     var webOptimize = true
+    var trimMode = ""             // "" = keep it all, "duration" = shorten to a length, "percent" = to a percentage
+    var trimLength = ""           // e.g. "3:00:00" (duration mode)
+    var trimPercent = 50.0        // 1-100 (percent mode)
+    var trimKeep = "first"        // which part to keep: first, last or middle
     var extraArgs = ""
+}
+
+/// Reads files saved by earlier versions: anything missing keeps its default.
+extension TranscodeOptions {
+    init(from decoder: Decoder) throws {
+        self.init()
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        try c.update(&skip, .skip)
+        try c.update(&preset, .preset)
+        try c.update(&container, .container)
+        try c.update(&encoder, .encoder)
+        try c.update(&qualityMode, .qualityMode)
+        try c.update(&quality, .quality)
+        try c.update(&videoBitrate, .videoBitrate)
+        try c.update(&encoderPreset, .encoderPreset)
+        try c.update(&framerate, .framerate)
+        try c.update(&framerateMode, .framerateMode)
+        try c.update(&maxWidth, .maxWidth)
+        try c.update(&maxHeight, .maxHeight)
+        try c.update(&deinterlace, .deinterlace)
+        try c.update(&audioEncoder, .audioEncoder)
+        try c.update(&audioBitrate, .audioBitrate)
+        try c.update(&allAudio, .allAudio)
+        try c.update(&allSubs, .allSubs)
+        try c.update(&webOptimize, .webOptimize)
+        try c.update(&trimMode, .trimMode)
+        try c.update(&trimLength, .trimLength)
+        try c.update(&trimPercent, .trimPercent)
+        try c.update(&trimKeep, .trimKeep)
+        try c.update(&extraArgs, .extraArgs)
+    }
 }
 
 struct OutputOptions: Codable, Equatable {
@@ -50,6 +120,18 @@ struct OutputOptions: Codable, Equatable {
     var filename = ""             // without extension; "" = video title. Never saved as a default.
     var keepSource = false
     var overwrite = false
+}
+
+/// Reads files saved by earlier versions: anything missing keeps its default.
+extension OutputOptions {
+    init(from decoder: Decoder) throws {
+        self.init()
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        try c.update(&dir, .dir)
+        try c.update(&filename, .filename)
+        try c.update(&keepSource, .keepSource)
+        try c.update(&overwrite, .overwrite)
+    }
 }
 
 /// One complete set of options: what a job runs with, and what "Save as default" stores.
@@ -91,9 +173,30 @@ struct Job: Identifiable, Codable, Equatable {
     var eta = ""
     var error: String?
     var outputs: [String] = []    // absolute paths of the finished files
+    var downloads: [String] = []  // downloaded files kept for a conversion that has not finished
     var log: [String] = []
     var settings: Settings
     var created = Date()
+}
+
+/// Reads job history saved by earlier versions: anything missing keeps its default.
+extension Job {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        url = try c.decode(String.self, forKey: .url)
+        title = try c.decode(String.self, forKey: .title)
+        settings = try c.decode(Settings.self, forKey: .settings)
+        try c.update(&id, .id)
+        try c.update(&status, .status)
+        try c.update(&percent, .percent)
+        try c.update(&speed, .speed)
+        try c.update(&eta, .eta)
+        error = try c.decodeIfPresent(String.self, forKey: .error)
+        try c.update(&outputs, .outputs)
+        try c.update(&downloads, .downloads)
+        try c.update(&log, .log)
+        try c.update(&created, .created)
+    }
 }
 
 enum ToolName: String, CaseIterable, Identifiable, Codable {

@@ -39,6 +39,15 @@ another one under **Advanced**. While a video is being made, yt-dlp and HandBrak
 temporary files in a hidden folder inside it, which is removed when the video finishes. Choose a
 folder on a drive with plenty of free space.
 
+**Shorten a video.** Under **Advanced → Convert**, choose *Shorten the video* to keep only part of
+it: a length (such as `3:00:00` out of a 12-hour video) or a percentage, taken from the first part,
+the last part or the middle.
+
+**If a conversion fails.** By default GetVideo keeps the downloaded file in the hidden folder
+until the conversion succeeds, and remembers it. Press **Try again** and it carries on from the
+conversion instead of downloading again. Removing the job deletes the kept file. You can turn this
+off under **Advanced → Download**.
+
 On first start GetVideo downloads the tools it needs (yt-dlp, HandBrakeCLI and ffmpeg) into its
 own folder and keeps them up to date. It runs entirely on your Mac: no account, no upload, no
 tracking.

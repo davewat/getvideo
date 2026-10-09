@@ -180,6 +180,9 @@ final class EndToEndTests: XCTestCase {
         var s = Settings()
         s.download.maxHeight = 360
         s.transcode.preset = "Fast 480p30"
+        s.transcode.trimMode = "percent"   // keep the last half of the 19-second clip
+        s.transcode.trimPercent = 50
+        s.transcode.trimKeep = "last"
         s.output.dir = out.path
         try queue.add(urls: ["https://www.youtube.com/watch?v=jNQXAC9IVRw"], settings: s)
 
@@ -201,6 +204,7 @@ final class EndToEndTests: XCTestCase {
         XCTAssertTrue(file.hasPrefix(out.path) && file.hasSuffix(".mp4"), file)
         let size = (try FileManager.default.attributesOfItem(atPath: file)[.size] as? Int) ?? 0
         XCTAssertGreaterThan(size, 10_000)
+        XCTAssertTrue(job.log.contains { $0.hasPrefix("Shortening to 0:00:10") }, "the cut was not applied: \(job.log.suffix(8))")
         XCTAssertNotEqual(job.title, job.url, "yt-dlp reports the title")
         let left = try FileManager.default.contentsOfDirectory(atPath: out.path)
         XCTAssertEqual(left.count, 1, "only the finished video remains in the working folder: \(left)")

@@ -28,10 +28,7 @@ func TestInterruptedJobsTemporaryFolderIsRemoved(t *testing.T) {
 	if err := os.WriteFile(keep, []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	b, _ := json.Marshal([]*Job{job})
-	if err := os.WriteFile(filepath.Join(data, "jobs.json"), b, 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeJobs(t, data, job)
 	tl, err := newTools(filepath.Join(data, "bin"))
 	if err != nil {
 		t.Fatal(err)
@@ -47,5 +44,13 @@ func TestInterruptedJobsTemporaryFolderIsRemoved(t *testing.T) {
 	}
 	if _, err := os.Stat(keep); err != nil {
 		t.Fatalf("a user file was removed: %v", err)
+	}
+}
+
+func writeJobs(t *testing.T, dataDir string, jobs ...*Job) {
+	t.Helper()
+	b, _ := json.Marshal(jobs)
+	if err := os.WriteFile(filepath.Join(dataDir, "jobs.json"), b, 0o644); err != nil {
+		t.Fatal(err)
 	}
 }

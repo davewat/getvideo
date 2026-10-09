@@ -3,13 +3,14 @@
 export const defaults = {
   download: {
     maxHeight: 1080, audioOnly: false, audioFormat: 'mp3', mergeContainer: 'mp4', formatSort: '', customFormat: '',
-    noPlaylist: true, subtitles: false, autoSubs: false, subLangs: 'en', embedSubs: false, embedMetadata: true,
+    noPlaylist: true, keepDownload: true, subtitles: false, autoSubs: false, subLangs: 'en', embedSubs: false, embedMetadata: true,
     embedThumbnail: false, cookiesBrowser: '', rateLimit: '', proxy: '', sponsorBlock: [], extraArgs: '',
   },
   transcode: {
     skip: false, preset: 'Fast 1080p30', container: 'mp4', encoder: '', qualityMode: '', quality: 22,
     videoBitrate: 4000, encoderPreset: '', framerate: '', framerateMode: 'vfr', maxWidth: 0, maxHeight: 0,
     deinterlace: '', audioEncoder: '', audioBitrate: 0, allAudio: false, allSubs: false, webOptimize: true, extraArgs: '',
+    trimMode: '', trimLength: '', trimPercent: 50, trimKeep: 'first',
   },
   output: { dir: '', filename: '', keepSource: false, overwrite: false },
 }
@@ -30,6 +31,7 @@ export const sections = [
       { key: 'audioOnly', label: 'Audio only', type: 'check' },
       { key: 'audioFormat', label: 'Audio format', type: 'select', show: audioOnly, options: same(['mp3', 'm4a', 'opus', 'flac', 'wav', 'best']) },
       { key: 'noPlaylist', label: 'Single video only (ignore playlist)', type: 'check' },
+      { key: 'keepDownload', label: 'Keep the download until it is converted, so a failed conversion can resume', type: 'check', wide: true, off: (f) => f.transcode.skip || f.download.audioOnly },
       { key: 'embedMetadata', label: 'Embed metadata', type: 'check' },
       { key: 'embedThumbnail', label: 'Embed thumbnail', type: 'check' },
       { key: 'subtitles', label: 'Download subtitles', type: 'check' },
@@ -52,6 +54,14 @@ export const sections = [
       { key: 'skip', label: 'Skip converting (keep the download as it is)', type: 'check', wide: true, off: audioOnly },
       { key: 'preset', label: 'Preset', type: 'preset', off: noTranscode },
       { key: 'container', label: 'Container', type: 'select', off: noTranscode, options: same(['mp4', 'mkv', 'webm']) },
+      { key: 'trimMode', label: 'Shorten the video', type: 'select', off: noTranscode,
+        options: [['', 'Keep the whole video'], ['duration', 'To a length'], ['percent', 'To a percentage']] },
+      { key: 'trimLength', label: 'Length to keep', type: 'text', placeholder: '3:00:00', off: noTranscode,
+        hint: 'Hours:minutes:seconds, such as 3:00:00. Or 90m, or 1h30m.', show: (f) => f.transcode.trimMode === 'duration' },
+      { key: 'trimPercent', label: 'Percentage to keep', type: 'range', min: 1, max: 100, step: 1, off: noTranscode,
+        show: (f) => f.transcode.trimMode === 'percent' },
+      { key: 'trimKeep', label: 'Keep the', type: 'select', off: noTranscode, show: (f) => f.transcode.trimMode !== '',
+        options: [['first', 'First part'], ['last', 'Last part'], ['middle', 'Middle']] },
       { key: 'encoder', label: 'Video encoder', type: 'select', off: noTranscode,
         options: [['', 'Preset default'], ['x264', 'H.264 (x264)'], ['x265', 'H.265 (x265)'], ['vt_h264', 'H.264 (VideoToolbox)'],
           ['vt_h265', 'H.265 (VideoToolbox)'], ['svt_av1', 'AV1 (SVT)'], ['vp9', 'VP9']] },

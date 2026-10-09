@@ -75,6 +75,10 @@ struct JobRow: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
             }
+            // A download kept for a conversion that did not finish: "Try again" continues from it.
+            if !job.status.isActive, job.status != .done, let kept = job.downloads.first {
+                Text("Download kept (\((kept as NSString).lastPathComponent)). Try again continues from the conversion.").hint()
+            }
             ForEach(job.outputs, id: \.self) { path in
                 OutputRow(path: path)
             }

@@ -104,7 +104,7 @@ function field(section, f) {
           const { path, message } = await api.pickFolder()
           if (path) { input.value = path; set(path) }
           else if (message) alert(message)
-        } }, 'Choose folder')), f.hint ? h('span', { class: 'hint' }, f.hint) : null)
+        } }, 'Choose folder')))
       break
     default: // text, number
       input = h('input', { type: f.type === 'number' ? 'number' : 'text', min: f.type === 'number' ? 0 : null,
@@ -114,6 +114,7 @@ function field(section, f) {
   }
   input?.setAttribute('spellcheck', 'false')
 
+  if (f.hint) wrap.append(h('span', { class: 'hint' }, f.hint))
   if (f.wide || f.type === 'chips') wrap.classList.add('wide')
   syncers.push(() => {
     const off = f.off?.(form) ?? false
@@ -329,10 +330,11 @@ function makeRow(job) {
     h('div', { class: 'seg-stage', 'data-stage': stage }, h('div', { class: 'seg-bar' }, h('i', {})), h('span', {}, label)))
   const track = h('div', { class: 'track-line' }, segs)
   const error = h('div', { class: 'error', role: 'alert' })
+  const kept = h('div', { class: 'muted small' })
   const outputs = h('div', { class: 'outputs' })
   const actions = h('div', { class: 'actions' })
   const log = h('pre', { class: 'log', hidden: true })
-  const el = h('article', { class: 'job' }, h('div', { class: 'job-head' }, title, status), track, error, outputs, actions, log)
+  const el = h('article', { class: 'job' }, h('div', { class: 'job-head' }, title, status), track, error, kept, outputs, actions, log)
 
   let lastStatus = null
   let lastOutputs = ''
@@ -357,6 +359,10 @@ function makeRow(job) {
 
     error.hidden = !j.error
     error.textContent = j.error ?? ''
+    // A download kept for a conversion that did not finish: "Try again" continues from it.
+    const keptFile = !isActive(j.status) && j.status !== 'done' ? j.downloads?.[0] : null
+    kept.hidden = !keptFile
+    kept.textContent = keptFile ? `Download kept (${keptFile.split(/[\\/]/).pop()}). Try again continues from the conversion.` : ''
 
     const outs = (j.outputs ?? []).join('\n')
     if (outs !== lastOutputs) {

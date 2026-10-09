@@ -38,8 +38,7 @@ final class JobQueue: ObservableObject {
         }
         var changed = false
         for i in jobs.indices where [.downloading, .converting, .saving].contains(jobs[i].status) {
-            // What it left behind in its working folder.
-            try? fm.removeItem(at: Self.workFolder(for: jobs[i].id, in: Self.outputDir(jobs[i].settings.output.dir)))
+            Self.discardWork(for: jobs[i]) // what it left behind in its working folder
             jobs[i].status = .failed
             jobs[i].error = Self.interruptedMessage
             jobs[i].speed = ""
@@ -95,12 +94,14 @@ final class JobQueue: ObservableObject {
     /// Removes a job that is not running.
     func remove(_ id: UUID) {
         guard id != runningID, let i = index(id) else { return }
+        Self.deleteWork(for: jobs[i]) // a kept download goes with the job
         jobs.remove(at: i)
         persist()
     }
 
     func clearFinished() {
         let before = jobs.count
+        for job in jobs where !job.status.isActive && job.id != runningID { Self.deleteWork(for: job) }
         jobs.removeAll { !$0.status.isActive && $0.id != runningID }
         if jobs.count != before { persist() }
     }
@@ -142,7 +143,11 @@ final class JobQueue: ObservableObject {
         let result = await task.result
         runningID = nil
         runningTask = nil
-        try? FileManager.default.removeItem(at: work)
+        if case .success = result {
+            try? FileManager.default.removeItem(at: work)
+        } else if let i = index(id) {
+            Self.discardWork(for: jobs[i]) // keeps the download for "Try again" when the job asked for that
+        }
 
         // After shutdown() the job is already recorded as interrupted; after remove-while-finishing
         // there is nothing to record.
@@ -154,6 +159,7 @@ final class JobQueue: ObservableObject {
             jobs[i].status = .done
             jobs[i].percent = 100
             jobs[i].error = nil
+            jobs[i].downloads = []
         case .failure where task.isCancelled:
             jobs[i].status = .canceled
             jobs[i].error = nil
@@ -195,8 +201,19 @@ final class JobQueue: ObservableObject {
             throw JobError(message: "Could not create temporary files in the working folder: \(error.localizedDescription)")
         }
 
-        let files = try await download(id, url: job.url, options: settings.download, work: work)
-        if files.isEmpty { throw JobError(message: "yt-dlp finished but reported no output file") }
+        var files: [URL]
+        if let kept = Self.keptDownloads(job) {
+            files = kept
+            note(id, "Using the download kept from last time; going straight to the conversion.")
+        } else {
+            files = try await download(id, url: job.url, options: settings.download, work: work)
+            if files.isEmpty { throw JobError(message: "yt-dlp finished but reported no output file") }
+            if Self.keepsDownload(settings), let i = index(id) {
+                // Tracked in the job (and saved), so it survives a crash or a quit.
+                jobs[i].downloads = files.map(\.path)
+                persist()
+            }
+        }
         // yt-dlp reported the real title during the download.
         let title = jobs.first(where: { $0.id == id })?.title ?? job.title
 
@@ -219,8 +236,51 @@ final class JobQueue: ObservableObject {
                 }
                 return moved
             }.value
+            // This file is finished: it is no longer waiting for a conversion.
+            if let i = index(id) {
+                jobs[i].downloads.removeAll { $0 == src.path }
+                persist()
+            }
         }
         if let i = index(id) { jobs[i].outputs = outputs }
+    }
+
+    /// True when a failed or canceled job leaves its downloaded file in the working folder, so
+    /// "Try again" continues from the conversion instead of downloading again.
+    static func keepsDownload(_ s: Settings) -> Bool { s.download.keepDownload && s.converts }
+
+    /// The downloads a previous attempt left behind, or nil when there are none or any has gone,
+    /// in which case the video is downloaded again.
+    static func keptDownloads(_ job: Job) -> [URL]? {
+        guard !job.downloads.isEmpty, ToolInstaller.isFile(URL(fileURLWithPath: job.downloads[0])),
+              job.downloads.allSatisfy({ ToolInstaller.isFile(URL(fileURLWithPath: $0)) }) else { return nil }
+        return job.downloads.map { URL(fileURLWithPath: $0) }
+    }
+
+    private static func work(for job: Job) -> URL { workFolder(for: job.id, in: outputDir(job.settings.output.dir)) }
+
+    /// Empties a job's temporary folder. When the job keeps its download only HandBrake's
+    /// half-written output goes; everything else stays so the job can continue.
+    static func discardWork(for job: Job) {
+        let fm = FileManager.default
+        let work = work(for: job)
+        guard keepsDownload(job.settings) else {
+            try? fm.removeItem(at: work)
+            return
+        }
+        for f in (try? fm.contentsOfDirectory(at: work, includingPropertiesForKeys: nil)) ?? [] where f.lastPathComponent.hasPrefix("out.") {
+            try? fm.removeItem(at: f)
+        }
+        _ = rmdir(work.path) // only succeeds when nothing is left in it
+    }
+
+    /// Deletes a job's temporary folder with everything in it, kept download included.
+    static func deleteWork(for job: Job) { try? FileManager.default.removeItem(at: work(for: job)) }
+
+    /// Adds a line to a job's log.
+    private func note(_ id: UUID, _ line: String) {
+        guard let i = index(id) else { return }
+        jobs[i].log.append(line)
     }
 
     /// A job's temporary folder: hidden, inside the working folder the video is saved to. yt-dlp
@@ -284,6 +344,22 @@ final class JobQueue: ObservableObject {
         try? FileManager.default.removeItem(at: dst)   // the previous file of a playlist has been moved, but be sure
 
         setStage(id, .converting, percent: 0)
+        if options.trimMode != "" {
+            var total = 0.0
+            if Trim.needsScan(options) {
+                let scan = await Proc.capture(tools.path(.handbrake), ["-i", source.path, "--scan"])
+                guard let seconds = Trim.scanDuration(scan.output) else {
+                    throw JobError(message: "HandBrakeCLI did not report the video's length, so it cannot be shortened")
+                }
+                total = seconds
+            }
+            if let cut = Trim.window(options, total: total) {
+                opts += Trim.args(start: cut.start, length: cut.length)
+                note(id, "Shortening to \(Trim.clockString(cut.length)), starting at \(Trim.clockString(cut.start)).")
+            } else {
+                note(id, "The video is already no longer than the length asked for; keeping all of it.")
+            }
+        }
         let feed = makeFeed(id)
         try await runStage("HandBrakeCLI", tools.path(.handbrake), ["-i", source.path, "-o", dst.path] + opts, feed) { line in
             if let p = Parsing.handBrakeProgress(line) {
@@ -295,6 +371,12 @@ final class JobQueue: ObservableObject {
             } else if !line.hasPrefix("Encoding:") {
                 feed.log(line)
             }
+        }
+        // HandBrake can finish normally without writing anything, for instance when it does not
+        // understand an option.
+        let size = (try? FileManager.default.attributesOfItem(atPath: dst.path)[.size] as? Int) ?? 0
+        if size == 0 {
+            throw JobError(message: "HandBrakeCLI finished without creating a video. Check the Convert settings, especially any extra arguments, and see the log.")
         }
         return dst
     }

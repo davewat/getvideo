@@ -16,6 +16,7 @@ type DownloadOptions struct {
 	FormatSort     string   `json:"formatSort"`     // -S, e.g. "res,codec:h264"
 	CustomFormat   string   `json:"customFormat"`   // -f, overrides the quality choice
 	NoPlaylist     bool     `json:"noPlaylist"`
+	KeepDownload   bool     `json:"keepDownload"` // keep the download until conversion succeeds, so a failed conversion can resume
 	Subtitles      bool     `json:"subtitles"`
 	AutoSubs       bool     `json:"autoSubs"`
 	SubLangs       string   `json:"subLangs"` // e.g. "en,es" or "all"
@@ -49,6 +50,10 @@ type TranscodeOptions struct {
 	AllAudio      bool    `json:"allAudio"`
 	AllSubs       bool    `json:"allSubs"`
 	WebOptimize   bool    `json:"webOptimize"`
+	TrimMode      string  `json:"trimMode"`    // "" = keep it all, "duration" = shorten to a length, "percent" = to a percentage
+	TrimLength    string  `json:"trimLength"`  // e.g. "3:00:00" (duration mode)
+	TrimPercent   float64 `json:"trimPercent"` // 1-100 (percent mode)
+	TrimKeep      string  `json:"trimKeep"`    // which part to keep: first, last or middle
 	ExtraArgs     string  `json:"extraArgs"`
 }
 
@@ -189,6 +194,9 @@ func (o TranscodeOptions) args() ([]string, error) {
 	}
 	if o.WebOptimize {
 		a = append(a, "--optimize")
+	}
+	if err := o.validateTrim(); err != nil {
+		return nil, err
 	}
 	extra, err := splitArgs(o.ExtraArgs)
 	if err != nil {

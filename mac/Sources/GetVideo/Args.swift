@@ -77,6 +77,7 @@ enum Args {
         if o.allAudio { a.append("--all-audio") }
         if o.allSubs { a.append("--all-subtitles") }
         if o.webOptimize { a.append("--optimize") }
+        try Trim.validate(o)
         do {
             return a + (try split(o.extraArgs))
         } catch let e as ArgsError {

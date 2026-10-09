@@ -138,6 +138,8 @@ struct AdvancedForm: View {
             SwitchRow("Include auto-generated subtitles", isOn: o.autoSubs)
             SwitchRow("Embed subtitles", isOn: o.embedSubs).off(!anySubs)
         }
+        SwitchRow("Keep the download until it is converted, so a failed conversion can resume", isOn: o.keepDownload)
+            .off(noTranscode)
         more($moreDownload) {
             inputs {
                 SelectField("Cookies from browser", selection: o.cookiesBrowser,
@@ -157,6 +159,23 @@ struct AdvancedForm: View {
         inputs {
             presetPicker
             SelectField("Container", selection: o.container, options: same(["mp4", "mkv", "webm"]))
+            SelectField("Shorten the video", selection: o.trimMode,
+                        options: [("", "Keep the whole video"), ("duration", "To a length"), ("percent", "To a percentage")])
+            if t.trimMode == "duration" {
+                TextBox("Length to keep", text: o.trimLength, placeholder: "3:00:00")
+            }
+            if t.trimMode == "percent" {
+                Field("Percentage to keep", value: "\(Int(t.trimPercent))%") {
+                    Slider(value: Binding(get: { t.trimPercent }, set: { settings.draft.transcode.trimPercent = $0.rounded() }),
+                           in: 1...100)
+                        .controlSize(.small)
+                        .accessibilityLabel("Percentage to keep")
+                }
+            }
+            if t.trimMode != "" {
+                SelectField("Keep the", selection: o.trimKeep,
+                            options: [("first", "First part"), ("last", "Last part"), ("middle", "Middle")])
+            }
             SelectField("Video encoder", selection: o.encoder, options: [
                 ("", "Preset default"), ("x264", "H.264 (x264)"), ("x265", "H.265 (x265)"), ("vt_h264", "H.264 (VideoToolbox)"),
                 ("vt_h265", "H.265 (VideoToolbox)"), ("svt_av1", "AV1 (SVT)"), ("vp9", "VP9"),
@@ -179,6 +198,9 @@ struct AdvancedForm: View {
             NumberBox("Max height (px, 0 = no limit)", value: o.maxHeight)
         }
         .off(noTranscode)
+        if t.trimMode == "duration" {
+            Text("Length: hours:minutes:seconds, such as 3:00:00. Or 90m, or 1h30m.").hint().off(noTranscode)
+        }
         switches {
             SwitchRow("Web optimized (mp4)", isOn: o.webOptimize)
             SwitchRow("Keep all audio tracks", isOn: o.allAudio)
