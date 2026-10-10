@@ -67,6 +67,31 @@ final class JobQueue: ObservableObject {
         startRunner()
     }
 
+    /// Queues a file already on this computer to be edited by HandBrake alone: converted, shortened,
+    /// or anything else the Convert settings say. It is treated like a downloaded file, except that
+    /// nothing is downloaded and the original is never changed.
+    func addFile(_ path: String, settings: Settings) throws {
+        let expanded = (path.trimmingCharacters(in: .whitespacesAndNewlines) as NSString).expandingTildeInPath
+        guard !expanded.isEmpty else { throw JobError(message: "Choose a file first") }
+        var isDir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: expanded, isDirectory: &isDir) else {
+            throw JobError(message: "Cannot find the file \(expanded)")
+        }
+        guard !isDir.boolValue else { throw JobError(message: "\(expanded) is a folder, not a video file") }
+        var s = settings
+        // Converting is the whole point; nothing is downloaded, so none of the download settings apply.
+        s.transcode.skip = false
+        s.download.audioOnly = false
+        s.download.keepDownload = false
+        s.output.keepSource = false
+        _ = try Args.transcode(s.transcode)
+        var job = Job(url: "", title: (expanded as NSString).lastPathComponent, settings: s)
+        job.source = expanded
+        jobs.append(job)
+        persist()
+        startRunner()
+    }
+
     func cancel(_ id: UUID) {
         if id == runningID {
             runningTask?.cancel()   // Proc.run sends the process SIGINT; process() records the outcome
@@ -185,7 +210,8 @@ final class JobQueue: ObservableObject {
         let settings = job.settings
         let fm = FileManager.default
 
-        let needed: [ToolName] = settings.converts ? [.ytdlp, .ffmpeg, .handbrake] : [.ytdlp, .ffmpeg]
+        let local = !job.source.isEmpty
+        let needed: [ToolName] = local ? [.handbrake] : (settings.converts ? [.ytdlp, .ffmpeg, .handbrake] : [.ytdlp, .ffmpeg])
         for name in needed where !ToolInstaller.isFile(tools.path(name)) {
             throw JobError(message: "\(name.rawValue) is not installed (see Tools)")
         }
@@ -202,7 +228,13 @@ final class JobQueue: ObservableObject {
         }
 
         var files: [URL]
-        if let kept = Self.keptDownloads(job) {
+        if local {
+            guard ToolInstaller.isFile(URL(fileURLWithPath: job.source)) else {
+                throw JobError(message: "Cannot find the file \(job.source)")
+            }
+            files = [URL(fileURLWithPath: job.source)]
+            note(id, "Editing \(job.source) with HandBrake. The original file is not changed.")
+        } else if let kept = Self.keptDownloads(job) {
             files = kept
             note(id, "Using the download kept from last time; going straight to the conversion.")
         } else {
@@ -225,9 +257,17 @@ final class JobQueue: ObservableObject {
             }
             try Task.checkCancellation()
             setStage(id, .saving, percent: 100)
-            let name = Parsing.sanitize(Parsing.outputName(custom: settings.output.filename, title: title, url: job.url,
+            var overwrite = settings.output.overwrite
+            let name: String
+            if local {
+                let base = settings.output.filename.isEmpty ? src.deletingPathExtension().lastPathComponent + " (edited)" : settings.output.filename
+                name = Parsing.sanitize(base)
+                // Never write over the file being edited, whatever the settings say.
+                if Self.isSameFile(outDir.appendingPathComponent(name + "." + final.pathExtension), src) { overwrite = false }
+            } else {
+                name = Parsing.sanitize(Parsing.outputName(custom: settings.output.filename, title: title, url: job.url,
                                                            source: src, fileCount: files.count))
-            let overwrite = settings.output.overwrite
+            }
             // Off the main actor: this is a copy when the output folder is on another volume.
             outputs += try await Task.detached { () -> [String] in
                 var moved = [try Parsing.move(final, into: outDir, name: name, overwrite: overwrite).path]
@@ -255,6 +295,13 @@ final class JobQueue: ObservableObject {
         guard !job.downloads.isEmpty, ToolInstaller.isFile(URL(fileURLWithPath: job.downloads[0])),
               job.downloads.allSatisfy({ ToolInstaller.isFile(URL(fileURLWithPath: $0)) }) else { return nil }
         return job.downloads.map { URL(fileURLWithPath: $0) }
+    }
+
+    /// Whether two paths are the same file on disk.
+    static func isSameFile(_ a: URL, _ b: URL) -> Bool {
+        let ids = [a, b].map { try? $0.resourceValues(forKeys: [.fileResourceIdentifierKey]).fileResourceIdentifier }
+        if let x = ids[0], let y = ids[1] { return x.isEqual(y) }
+        return a.standardizedFileURL.path == b.standardizedFileURL.path
     }
 
     private static func work(for job: Job) -> URL { workFolder(for: job.id, in: outputDir(job.settings.output.dir)) }

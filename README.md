@@ -39,6 +39,11 @@ another one under **Advanced**. While a video is being made, yt-dlp and HandBrak
 temporary files in a hidden folder inside it, which is removed when the video finishes. Choose a
 folder on a drive with plenty of free space.
 
+**Edit a file you already have.** Under the link box, **Choose File** picks a video on your
+computer. It joins the queue like a download, but nothing is downloaded: HandBrake alone converts
+or shortens it using the Convert settings. The result is saved in your working folder as
+"name (edited)", and the original is never changed or overwritten.
+
 **Shorten a video.** Under **Advanced → Convert**, choose *Shorten the video* to keep only part of
 it: a length (such as `3:00:00` out of a 12-hour video) or a percentage, taken from the first part,
 the last part or the middle.

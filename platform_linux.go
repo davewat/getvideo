@@ -68,6 +68,24 @@ func pickFolder(ctx context.Context) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+// pickFile uses zenity or kdialog when one is installed; "" means the user cancelled.
+func pickFile(ctx context.Context) (string, error) {
+	const title = "Choose a video to edit"
+	var cmd *exec.Cmd
+	if p, err := exec.LookPath("zenity"); err == nil {
+		cmd = exec.CommandContext(ctx, p, "--file-selection", "--title="+title)
+	} else if p, err := exec.LookPath("kdialog"); err == nil {
+		cmd = exec.CommandContext(ctx, p, "--title", title, "--getopenfilename", ".")
+	} else {
+		return "", errors.New("No file chooser is installed. Type the file's path instead.")
+	}
+	out, err := cmd.Output()
+	if err != nil {
+		return "", nil
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 func ffmpegAsset() string {
 	if runtime.GOARCH == "arm64" {
 		return "ffmpeg-master-latest-linuxarm64-gpl.tar.xz"

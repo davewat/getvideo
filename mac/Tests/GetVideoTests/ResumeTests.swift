@@ -6,6 +6,13 @@ import XCTest
 /// A port of resume_test.go.
 @MainActor
 final class ResumeTests: XCTestCase {
+    /// Used by `EditFileTests`, which needs the same stand-in tools.
+    func makeEditEnv(_ test: XCTestCase) throws -> (JobQueue, ResumeTests.Env) {
+        let env = try makeEnv()
+        test.addTeardownBlock { unsetenv("FAKE_CALLS") }
+        return (env.queue(), env)
+    }
+
     private static let fakeYtdlp = """
     #!/bin/sh
     dir=.
@@ -26,7 +33,7 @@ final class ResumeTests: XCTestCase {
     printf converted > "$out"
     """
 
-    private struct Env {
+    struct Env {
         let dir: URL
         let folder: URL
         let calls: String
@@ -39,7 +46,7 @@ final class ResumeTests: XCTestCase {
         func touch(_ suffix: String) { FileManager.default.createFile(atPath: calls + "." + suffix, contents: nil) }
     }
 
-    private func makeEnv() throws -> Env {
+    func makeEnv() throws -> Env {
         let dir = try makeTempDir(self)
         let bin = dir.appendingPathComponent("bin", isDirectory: true)
         try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
@@ -167,5 +174,84 @@ final class ResumeTests: XCTestCase {
         XCTAssertFalse(exists(work.appendingPathComponent("out.mp4")), "half-written output was kept")
         XCTAssertEqual(q.jobs.first?.status, .failed)
         XCTAssertEqual(q.jobs.first?.downloads, [kept.path])
+    }
+}
+
+/// A file already on disk is edited by HandBrake alone. Ports of the Go tests of the same names.
+@MainActor
+final class EditFileTests: XCTestCase {
+    private func makeQueue() throws -> (JobQueue, ResumeTests.Env) {
+        let helper = ResumeTests()
+        return try helper.makeEditEnv(self)
+    }
+
+    private func wait(_ q: JobQueue, for status: JobStatus) async throws -> Job {
+        let start = Date()
+        while Date().timeIntervalSince(start) < 10 {
+            if q.jobs.count == 1, q.jobs[0].status == status { return q.jobs[0] }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTFail("timed out waiting for \(status); jobs: \(q.jobs.map(\.status))")
+        return q.jobs[0]
+    }
+
+    func testEditingAFileOnDiskNeedsNoDownload() async throws {
+        let (q, env) = try makeQueue()
+        env.touch("ok")
+        let src = env.dir.appendingPathComponent("My Lecture.mov")
+        try Data("original".utf8).write(to: src)
+        var s = Settings()
+        s.output.dir = env.folder.path
+        s.output.keepSource = true      // meaningless for a file: it is never copied
+        s.transcode.skip = true         // converting is the whole point, so this is ignored
+        try q.addFile(src.path, settings: s)
+        let done = try await wait(q, for: .done)
+
+        XCTAssertEqual(env.count("ytdlp"), 0)
+        XCTAssertEqual(env.count("hb"), 1)
+        XCTAssertEqual(try String(contentsOf: src, encoding: .utf8), "original", "the original was changed")
+        XCTAssertEqual(done.outputs.map { ($0 as NSString).lastPathComponent }, ["My Lecture (edited).mp4"])
+        XCTAssertEqual(try String(contentsOfFile: done.outputs[0], encoding: .utf8), "converted")
+        XCTAssertEqual(done.title, "My Lecture.mov")
+        XCTAssertEqual(done.url, "")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: env.folder.path).count, 1)
+    }
+
+    /// "Overwrite an existing file" must never overwrite the file being edited.
+    func testEditingNeverOverwritesTheOriginal() async throws {
+        let (q, env) = try makeQueue()
+        env.touch("ok")
+        try FileManager.default.createDirectory(at: env.folder, withIntermediateDirectories: true)
+        let src = env.folder.appendingPathComponent("clip.mp4")
+        try Data("original".utf8).write(to: src)
+        var s = Settings()
+        s.output.dir = env.folder.path
+        s.output.filename = "clip"      // same folder, same name, same extension...
+        s.output.overwrite = true       // ...with overwrite on: the worst case
+        try q.addFile(src.path, settings: s)
+        let done = try await wait(q, for: .done)
+        XCTAssertEqual(try String(contentsOf: src, encoding: .utf8), "original", "the original was overwritten")
+        XCTAssertEqual(done.outputs.map { ($0 as NSString).lastPathComponent }, ["clip (1).mp4"])
+    }
+
+    func testRejectsMissingFilesAndFolders() throws {
+        let (q, env) = try makeQueue()
+        XCTAssertThrowsError(try q.addFile(env.folder.appendingPathComponent("nope.mp4").path, settings: Settings()))
+        XCTAssertThrowsError(try q.addFile(env.dir.path, settings: Settings()), "a folder is not a video")
+        XCTAssertThrowsError(try q.addFile("  ", settings: Settings()))
+        XCTAssertTrue(q.jobs.isEmpty)
+    }
+
+    /// If the file goes away before its turn, the job fails clearly.
+    func testEditedFileThatDisappearsFailsClearly() async throws {
+        let (_, env) = try makeQueue()
+        var s = Settings()
+        s.output.dir = env.folder.path
+        var job = Job(url: "", title: "gone.mp4", settings: s)
+        job.source = env.dir.appendingPathComponent("gone.mp4").path
+        try JSONEncoder().encode([job]).write(to: env.jobsFile)
+        let q = env.queue()      // the saved job is still queued, so it runs at once
+        let failed = try await wait(q, for: .failed)
+        XCTAssertTrue(failed.error?.contains("Cannot find the file") == true, failed.error ?? "nil")
     }
 }

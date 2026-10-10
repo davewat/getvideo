@@ -75,6 +75,8 @@ func (e *fakeEnv) wait(t *testing.T, want Status) *Job {
 	return nil
 }
 
+func (e *fakeEnv) touch(suffix string) { _ = os.WriteFile(e.calls+"."+suffix, nil, 0o644) }
+
 func (e *fakeEnv) add(t *testing.T, keep bool) {
 	t.Helper()
 	j := &Job{URL: "https://example.com/v", Output: OutputOptions{Dir: e.folder}}
@@ -211,5 +213,98 @@ func TestInterruptedConversionKeepsTheDownload(t *testing.T) {
 	}
 	if js := q.list(); len(js) != 1 || js[0].Status != StFailed || len(js[0].Downloads) != 1 {
 		t.Fatalf("job after restart: %+v", js)
+	}
+}
+
+// A file already on disk is edited by HandBrake alone: no download, and the original is never touched.
+func TestEditingAFileOnDiskNeedsNoDownload(t *testing.T) {
+	e := newFakeEnv(t)
+	e.touch("ok")
+	src := filepath.Join(t.TempDir(), "My Lecture.mov")
+	if err := os.WriteFile(src, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	j := &Job{Source: src, Output: OutputOptions{Dir: e.folder, KeepSource: true}}
+	j.Download.KeepDownload = true // meaningless for a file: nothing is downloaded
+	j.Transcode.Skip = true        // converting is the whole point, so this is ignored
+	if err := e.q.add(j); err != nil {
+		t.Fatal(err)
+	}
+	done := e.wait(t, StDone)
+
+	if e.count("ytdlp") != 0 || e.count("hb") != 1 {
+		t.Fatalf("yt-dlp ran %d times and HandBrake %d; want 0 and 1", e.count("ytdlp"), e.count("hb"))
+	}
+	if b, _ := os.ReadFile(src); string(b) != "original" {
+		t.Fatalf("the original was changed or removed: %q", b)
+	}
+	if len(done.Outputs) != 1 || filepath.Base(done.Outputs[0]) != "My Lecture (edited).mp4" {
+		t.Fatalf("outputs: %v", done.Outputs)
+	}
+	if b, _ := os.ReadFile(done.Outputs[0]); string(b) != "converted" {
+		t.Fatalf("output is %q", b)
+	}
+	if done.Title != "My Lecture.mov" || done.URL != "" || len(done.Downloads) != 0 {
+		t.Fatalf("job: %+v", done)
+	}
+	if left, _ := os.ReadDir(e.folder); len(left) != 1 {
+		t.Fatalf("only the edited video should be in the folder, found %d entries (keepSource must not copy the original)", len(left))
+	}
+}
+
+// "Overwrite an existing file" must never overwrite the file being edited.
+func TestEditingNeverOverwritesTheOriginal(t *testing.T) {
+	e := newFakeEnv(t)
+	e.touch("ok")
+	src := filepath.Join(e.folder, "clip.mp4")
+	if err := os.MkdirAll(e.folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(src, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Same folder, same name, same extension, overwrite on: the worst case.
+	j := &Job{Source: src, Output: OutputOptions{Dir: e.folder, Filename: "clip", Overwrite: true}}
+	if err := e.q.add(j); err != nil {
+		t.Fatal(err)
+	}
+	done := e.wait(t, StDone)
+	if b, _ := os.ReadFile(src); string(b) != "original" {
+		t.Fatalf("the original was overwritten: %q", b)
+	}
+	if len(done.Outputs) != 1 || filepath.Base(done.Outputs[0]) != "clip (1).mp4" {
+		t.Fatalf("outputs: %v", done.Outputs)
+	}
+}
+
+func TestEditingRejectsMissingFilesAndFolders(t *testing.T) {
+	e := newFakeEnv(t)
+	for _, src := range []string{filepath.Join(e.folder, "nope.mp4"), t.TempDir()} {
+		if err := e.q.add(&Job{Source: src}); err == nil {
+			t.Errorf("%q should be rejected", src)
+		}
+	}
+	if len(e.q.list()) != 0 {
+		t.Fatal("nothing should be queued")
+	}
+}
+
+// If the file goes away before its turn, the job fails clearly instead of running HandBrake on nothing.
+func TestEditedFileThatDisappearsFailsClearly(t *testing.T) {
+	data := t.TempDir()
+	bin := filepath.Join(data, "bin")
+	tl, _ := newTools(bin)
+	_ = os.WriteFile(filepath.Join(bin, toolHandbrake), []byte("#!/bin/sh\nexit 9\n"), 0o755)
+	gone := filepath.Join(t.TempDir(), "gone.mp4")
+	writeJobs(t, data, &Job{ID: "abc", Status: StQueued, Source: gone, Title: "gone.mp4", Output: OutputOptions{Dir: t.TempDir()}})
+	q, err := newQueue(data, tl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer q.shutdown()
+	e := &fakeEnv{q: q}
+	failed := e.wait(t, StFailed)
+	if !strings.Contains(failed.Error, "cannot find the file") {
+		t.Fatalf("error: %q", failed.Error)
 	}
 }

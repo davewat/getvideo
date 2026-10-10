@@ -148,6 +148,14 @@ func (s *server) handler() http.Handler {
 		}
 		writeJSON(w, 200, map[string]string{"path": path})
 	})
+	mux.HandleFunc("POST /api/pick-file", func(w http.ResponseWriter, r *http.Request) {
+		path, err := pickFile(r.Context())
+		if err != nil { // no chooser on this system: the page asks the user to type the path
+			writeJSON(w, 200, map[string]string{"path": "", "message": err.Error()})
+			return
+		}
+		writeJSON(w, 200, map[string]string{"path": path})
+	})
 	mux.HandleFunc("GET /api/events", s.events)
 	mux.Handle("/", spa(s.web))
 	return s.guard(mux)

@@ -65,6 +65,22 @@ if ($d.ShowDialog($top) -eq 'OK') { [Console]::Out.Write($d.SelectedPath) }`
 	return strings.TrimSpace(string(out)), nil
 }
 
+// pickFile shows the Windows file chooser through PowerShell; "" means the user cancelled.
+func pickFile(ctx context.Context) (string, error) {
+	const script = `[Console]::OutputEncoding = [Text.Encoding]::UTF8
+Add-Type -AssemblyName System.Windows.Forms
+$d = New-Object System.Windows.Forms.OpenFileDialog
+$d.Title = 'Choose a video to edit'
+$d.Filter = 'Video files|*.mp4;*.mkv;*.mov;*.avi;*.webm;*.m4v;*.wmv;*.flv;*.ts;*.mpg;*.mpeg|All files|*.*'
+$top = New-Object System.Windows.Forms.Form -Property @{ TopMost = $true }
+if ($d.ShowDialog($top) -eq 'OK') { [Console]::Out.Write($d.FileName) }`
+	out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-STA", "-Command", script).Output()
+	if err != nil {
+		return "", errors.New("The file chooser could not be opened. Type the file's path instead.")
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 func ffmpegAsset() string {
 	if runtime.GOARCH == "arm64" {
 		return "ffmpeg-master-latest-winarm64-gpl.zip"

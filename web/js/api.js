@@ -23,5 +23,6 @@ export const api = {
   settings: () => call('GET', '/api/settings'),
   saveSettings: (v) => call('PUT', '/api/settings', v),
   resetSettings: () => call('DELETE', '/api/settings'),
+  pickFile: () => call('POST', '/api/pick-file'),
   pickFolder: () => call('POST', '/api/pick-folder'),
 }

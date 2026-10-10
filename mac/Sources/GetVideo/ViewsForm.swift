@@ -7,6 +7,8 @@ import SwiftUI
 @MainActor
 final class LinkForm: ObservableObject {
     @Published var text = ""
+    /// A file on this computer chosen to be edited by HandBrake, or "".
+    @Published var file = ""
     /// "Not added: ..." or "Defaults not saved: ...", shown above the primary button.
     @Published var error: String?
 
@@ -41,7 +43,44 @@ struct LinkSection: View {
                 .background(Color.well, in: RoundedRectangle(cornerRadius: 8))
                 .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.line, lineWidth: 1))
             Text("Paste one link, or several on separate lines.").hint()
+            fileRow
         }
+    }
+
+    /// Or a file already on this Mac, edited by HandBrake alone: no download.
+    private var fileRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Button("Choose File…", action: chooseFile)
+                if form.file.isEmpty {
+                    Text("Or edit a file on this Mac").font(.system(size: 13)).foregroundStyle(Color.soft)
+                } else {
+                    Image(systemName: "film").foregroundStyle(Color.soft).accessibilityHidden(true)
+                    Text((form.file as NSString).lastPathComponent)
+                        .font(.system(size: 13)).lineLimit(1).truncationMode(.middle).help(form.file)
+                    Button {
+                        form.file = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(Color.soft)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear the chosen file")
+                }
+            }
+            Text("HandBrake converts or shortens it using the Convert settings. The original is never changed.").hint()
+        }
+        .padding(.top, 4)
+    }
+
+    private func chooseFile() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.movie]
+        panel.prompt = "Choose"
+        panel.message = "Choose a video to edit with HandBrake"
+        if panel.runModal() == .OK, let url = panel.url { form.file = url.path }
     }
 }
 
@@ -127,12 +166,19 @@ struct SubmitSection: View {
 
     private func submit() {
         let urls = form.urls
-        guard !urls.isEmpty else { return }
+        guard !urls.isEmpty || !form.file.isEmpty else { return }
         form.error = nil
         do {
             // Easy mode never sends unsaved Advanced edits.
-            try queue.add(urls: urls, settings: isEasy ? settings.saved : settings.draft)
-            form.text = ""
+            let chosen = isEasy ? settings.saved : settings.draft
+            if !urls.isEmpty {
+                try queue.add(urls: urls, settings: chosen)
+                form.text = "" // queued; a problem with the file below must not queue these twice
+            }
+            if !form.file.isEmpty {
+                try queue.addFile(form.file, settings: chosen)
+                form.file = ""
+            }
             if !isEasy { settings.draft.output.filename = "" }
         } catch {
             form.error = "Not added: \(userMessage(error))"

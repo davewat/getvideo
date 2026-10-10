@@ -210,4 +210,35 @@ final class EndToEndTests: XCTestCase {
         XCTAssertEqual(left.count, 1, "only the finished video remains in the working folder: \(left)")
         XCTAssertTrue(seen.contains(.downloading) && seen.contains(.converting), "\(seen)")
     }
+
+    /// A local file, edited by the real HandBrake: shortened to 6 seconds, original untouched.
+    func testEndToEndEditsALocalFile() async throws {
+        let env = ProcessInfo.processInfo.environment
+        try XCTSkipUnless(env["GETVIDEO_E2E"] == "1", "set GETVIDEO_E2E=1 to run")
+        let bin = env["GETVIDEO_E2E_BIN"].map { URL(fileURLWithPath: $0, isDirectory: true) } ?? AppPaths.bin
+        let input = try XCTUnwrap(env["GETVIDEO_E2E_FILE"], "set GETVIDEO_E2E_FILE to a short video")
+        let dir = try makeTempDir(self)
+        let out = dir.appendingPathComponent("out", isDirectory: true)
+        let before = try Data(contentsOf: URL(fileURLWithPath: input))
+
+        let tools = ToolManager(binDir: bin)
+        await tools.refresh(checkLatest: false)
+        let queue = JobQueue(tools: tools, jobsFile: dir.appendingPathComponent("jobs.json"),
+                             legacyWorkDir: dir.appendingPathComponent("work", isDirectory: true))
+        var s = Settings()
+        s.transcode.preset = "Fast 480p30"
+        s.transcode.trimMode = "duration"
+        s.transcode.trimLength = "0:06"
+        s.output.dir = out.path
+        try queue.addFile(input, settings: s)
+
+        let start = Date()
+        while Date().timeIntervalSince(start) < 120, queue.jobs[0].status.isActive { try await Task.sleep(nanoseconds: 100_000_000) }
+        let job = queue.jobs[0]
+        XCTAssertEqual(job.status, .done, job.error ?? job.log.suffix(10).joined(separator: "\n"))
+        XCTAssertTrue(job.log.contains { $0.hasPrefix("Shortening to 0:00:06") }, "\(job.log.suffix(8))")
+        let file = try XCTUnwrap(job.outputs.first)
+        XCTAssertTrue(file.hasSuffix("(edited).mp4"), file)
+        XCTAssertEqual(try Data(contentsOf: URL(fileURLWithPath: input)), before, "the original was changed")
+    }
 }

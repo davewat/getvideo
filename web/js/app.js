@@ -153,10 +153,21 @@ function plan(v) {
 let submitBtn = null
 
 function buildForm() {
-  const url = h('textarea', { rows: 2, placeholder: 'https://www.youtube.com/watch?v=…', required: true, id: 'url' })
+  const url = h('textarea', { rows: 2, placeholder: 'https://www.youtube.com/watch?v=…', id: 'url' })
   url.setAttribute('spellcheck', 'false')
   const error = h('p', { class: 'error', role: 'alert', hidden: true })
   submitBtn = h('button', { class: 'btn primary', type: 'submit' }, 'Get video')
+
+  // Or a file already on this computer, edited by HandBrake alone: no download.
+  const file = h('input', { type: 'text', placeholder: '/path/to/a/video.mp4', spellcheck: 'false' })
+  const chooseFile = h('button', { type: 'button', class: 'btn', onclick: async () => {
+    const { path, message } = await api.pickFile()
+    if (path) file.value = path
+    else if (message) alert(message)
+  } }, 'Choose file')
+  const fileRow = h('label', { class: 'field' }, h('span', {}, 'Or edit a file on this computer'),
+    h('div', { class: 'inline' }, file, chooseFile),
+    h('span', { class: 'hint' }, 'HandBrake converts or shortens it using the Convert settings. The original is never changed.'))
 
   const steps = sections.map((s) => h('section', { class: 'step', 'data-stage': s.key },
     h('h3', {}, h('span', { class: 'swatch' }), s.title, h('span', { class: 'tool-name' }, s.tool)),
@@ -203,7 +214,7 @@ function buildForm() {
   el.append(
     h('label', { class: 'url' }, h('span', { class: 'url-label' }, 'Video link'), url,
       h('span', { class: 'hint' }, 'Paste one link, or several on separate lines.')),
-    easy, h('div', { class: 'adv-only steps' }, steps), defaultsBar, error, submitBtn)
+    fileRow, easy, h('div', { class: 'adv-only steps' }, steps), defaultsBar, error, submitBtn)
 
   url.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) el.requestSubmit()
@@ -211,14 +222,21 @@ function buildForm() {
   el.addEventListener('submit', async (e) => {
     e.preventDefault()
     const urls = url.value.split(/\s+/).filter(Boolean)
-    if (!urls.length) return
+    const source = file.value.trim()
+    if (!urls.length && !source) {
+      error.textContent = 'Paste a link or choose a file first.'
+      error.hidden = false
+      return
+    }
     error.hidden = true
     submitBtn.disabled = true
     try {
       // Easy mode never sends unsaved Advanced edits.
       const opts = structuredClone(mode === 'easy' ? saved : form)
       for (const u of urls) await api.addJob({ url: u, ...opts })
+      if (source) await api.addJob({ source, ...opts })
       url.value = ''
+      file.value = ''
     } catch (x) {
       error.textContent = `Not added: ${x.message}`
       error.hidden = false
@@ -343,7 +361,7 @@ function makeRow(job) {
   row.update = (j) => {
     row.job = j
     title.textContent = j.title
-    title.title = j.url
+    title.title = j.source || j.url
     el.dataset.status = j.status
 
     const at = STAGES.indexOf(j.status)
@@ -355,7 +373,8 @@ function makeRow(job) {
       s.querySelector('i').style.width = `${fill}%`
       s.dataset.state = fill >= 100 && at !== i ? 'done' : at === i ? 'active' : ''
     })
-    segs[1].hidden = j.transcode.skip || j.download.audioOnly
+    segs[0].hidden = !!j.source // a file on disk is never downloaded
+    segs[1].hidden = !j.source && (j.transcode.skip || j.download.audioOnly)
 
     error.hidden = !j.error
     error.textContent = j.error ?? ''

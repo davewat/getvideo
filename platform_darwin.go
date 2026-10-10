@@ -43,6 +43,16 @@ func pickFolder(ctx context.Context) (string, error) {
 	return strings.TrimRight(strings.TrimSpace(string(out)), "/"), nil
 }
 
+// pickFile shows the system file chooser for a video; "" means the user cancelled.
+func pickFile(ctx context.Context) (string, error) {
+	out, err := exec.CommandContext(ctx, "osascript", "-e",
+		`POSIX path of (choose file of type {"public.movie"} with prompt "Choose a video to edit")`).Output()
+	if err != nil {
+		return "", nil
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
 // prepareExecutable clears the quarantine flag that would block launching a downloaded binary.
 func prepareExecutable(path string) {
 	_ = exec.Command("xattr", "-d", "com.apple.quarantine", path).Run()

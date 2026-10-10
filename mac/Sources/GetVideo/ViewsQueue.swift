@@ -119,7 +119,8 @@ struct Timeline: View {
     }
 
     private var stages: [Stage] {
-        job.settings.converts ? [.download, .convert, .save] : [.download, .save]
+        if !job.source.isEmpty { return [.convert, .save] } // a file on disk is never downloaded
+        return job.settings.converts ? [.download, .convert, .save] : [.download, .save]
     }
 
     /// 0...1: full once the stage is behind us, the job's percentage while it runs. Saving has

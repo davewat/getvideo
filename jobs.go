@@ -36,6 +36,7 @@ const maxLogLines = 400
 type Job struct {
 	ID        string           `json:"id"`
 	URL       string           `json:"url"`
+	Source    string           `json:"source,omitempty"` // a file on this computer to edit with HandBrake, instead of a download
 	Title     string           `json:"title"`
 	Status    Status           `json:"status"`
 	Percent   float64          `json:"percent"` // progress of the current stage
@@ -78,7 +79,7 @@ func workDirFor(j *Job) string { return filepath.Join(j.Output.Dir, workPrefix+j
 // keepsDownload is true when a failed or canceled job leaves its downloaded file in the working
 // folder, so "Try again" continues from the conversion instead of downloading again.
 func keepsDownload(j *Job) bool {
-	return j.Download.KeepDownload && !j.Transcode.Skip && !j.Download.AudioOnly
+	return j.Source == "" && j.Download.KeepDownload && !j.Transcode.Skip && !j.Download.AudioOnly
 }
 
 // discardWork empties a job's temporary folder. When the job keeps its download only HandBrake's
@@ -190,11 +191,21 @@ func (q *queue) list() []*Job {
 func newID() string { return strconv.FormatInt(time.Now().UnixNano(), 36) }
 
 func (q *queue) add(j *Job) error {
-	if !strings.HasPrefix(j.URL, "http://") && !strings.HasPrefix(j.URL, "https://") {
-		return errors.New("url must start with http:// or https://")
-	}
-	if _, err := j.Download.args(); err != nil {
-		return err
+	if j.Source != "" {
+		// A file already on disk: HandBrake edits it, with no download. The original is never changed.
+		path, err := checkSource(j.Source)
+		if err != nil {
+			return err
+		}
+		j.Source, j.URL = path, ""
+		j.Download.AudioOnly, j.Download.KeepDownload, j.Transcode.Skip = false, false, false
+	} else {
+		if !strings.HasPrefix(j.URL, "http://") && !strings.HasPrefix(j.URL, "https://") {
+			return errors.New("url must start with http:// or https://")
+		}
+		if _, err := j.Download.args(); err != nil {
+			return err
+		}
 	}
 	if _, err := j.Transcode.args(); err != nil {
 		return err
@@ -205,6 +216,9 @@ func (q *queue) add(j *Job) error {
 	}
 	j.ID, j.Status, j.Created, j.Log = newID(), StQueued, time.Now(), []string{}
 	j.Title = j.URL
+	if j.Source != "" {
+		j.Title = filepath.Base(j.Source)
+	}
 	q.mu.Lock()
 	q.jobs = append(q.jobs, j)
 	q.persist()
@@ -378,13 +392,37 @@ func (q *queue) process(j *Job) {
 	}
 }
 
-func (q *queue) pipeline(ctx context.Context, j *Job, work string) error {
-	for _, n := range []string{toolYtdlp, toolFfmpeg} {
-		if !q.tools.installed(n) {
-			return fmt.Errorf("%s is not installed (Tools panel)", n)
+// checkSource turns what the user gave into the absolute path of a file that exists.
+func checkSource(path string) (string, error) {
+	if strings.HasPrefix(path, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			path = filepath.Join(home, path[2:])
 		}
 	}
-	transcode := !j.Transcode.Skip && !j.Download.AudioOnly
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	st, err := os.Stat(abs)
+	switch {
+	case err != nil:
+		return "", fmt.Errorf("cannot find the file %s", abs)
+	case st.IsDir():
+		return "", fmt.Errorf("%s is a folder, not a video file", abs)
+	}
+	return abs, nil
+}
+
+func (q *queue) pipeline(ctx context.Context, j *Job, work string) error {
+	local := j.Source != ""
+	if !local {
+		for _, n := range []string{toolYtdlp, toolFfmpeg} {
+			if !q.tools.installed(n) {
+				return fmt.Errorf("%s is not installed (Tools panel)", n)
+			}
+		}
+	}
+	transcode := local || (!j.Transcode.Skip && !j.Download.AudioOnly)
 	if transcode && !q.tools.installed(toolHandbrake) {
 		return errors.New("HandBrakeCLI is not installed (Tools panel)")
 	}
@@ -395,8 +433,14 @@ func (q *queue) pipeline(ctx context.Context, j *Job, work string) error {
 		return fmt.Errorf("working folder: %w", err)
 	}
 
-	files := keptDownloads(j)
-	if files != nil {
+	var files []string
+	if local {
+		if _, err := checkSource(j.Source); err != nil {
+			return err
+		}
+		files = []string{j.Source}
+		q.logLine(j, "Editing "+j.Source+" with HandBrake. The original file is not changed.")
+	} else if files = keptDownloads(j); files != nil {
 		q.logLine(j, "Using the download kept from last time; going straight to the conversion.")
 	} else {
 		var err error
@@ -424,7 +468,16 @@ func (q *queue) pipeline(ctx context.Context, j *Job, work string) error {
 		}
 		q.update(j, false, func(j *Job) { j.Status, j.Percent, j.Speed, j.ETA = StMoving, 100, "", "" })
 		name := j.Output.Filename
-		if name == "" || len(files) > 1 {
+		overwrite := j.Output.Overwrite
+		if local {
+			if name == "" {
+				name = strings.TrimSuffix(filepath.Base(src), filepath.Ext(src)) + " (edited)"
+			}
+			// Never write over the file being edited, whatever the settings say.
+			if same(filepath.Join(j.Output.Dir, sanitize(name)+filepath.Ext(final)), src) {
+				overwrite = false
+			}
+		} else if name == "" || len(files) > 1 {
 			name = strings.TrimSuffix(filepath.Base(src), filepath.Ext(src))
 			if j.Title != "" && j.Title != j.URL && len(files) == 1 {
 				name = j.Title
@@ -432,12 +485,12 @@ func (q *queue) pipeline(ctx context.Context, j *Job, work string) error {
 		} else if i > 0 {
 			name = fmt.Sprintf("%s %d", name, i+1)
 		}
-		dst, err := moveInto(final, j.Output.Dir, sanitize(name), j.Output.Overwrite)
+		dst, err := moveInto(final, j.Output.Dir, sanitize(name), overwrite)
 		if err != nil {
 			return err
 		}
 		outs = append(outs, dst)
-		if transcode && j.Output.KeepSource {
+		if transcode && !local && j.Output.KeepSource {
 			sdst, err := moveInto(src, j.Output.Dir, sanitize(name)+" (source)", j.Output.Overwrite)
 			if err != nil {
 				return err
@@ -463,6 +516,16 @@ func keptDownloads(j *Job) []string {
 		}
 	}
 	return append([]string(nil), j.Downloads...)
+}
+
+// same reports whether two paths are the same file on disk.
+func same(a, b string) bool {
+	sa, errA := os.Stat(a)
+	sb, errB := os.Stat(b)
+	if errA != nil || errB != nil {
+		return filepath.Clean(a) == filepath.Clean(b)
+	}
+	return os.SameFile(sa, sb)
 }
 
 func withoutPath(paths []string, p string) []string {

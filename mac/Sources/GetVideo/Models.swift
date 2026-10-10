@@ -165,7 +165,8 @@ enum JobStatus: String, Codable {
 /// One URL's trip through download -> convert -> save.
 struct Job: Identifiable, Codable, Equatable {
     var id = UUID()
-    var url: String
+    var url: String               // empty for a file edited on this computer
+    var source = ""              // a file on this computer to edit with HandBrake, instead of a download
     var title: String             // the URL until yt-dlp reports the real title
     var status: JobStatus = .queued
     var percent = 0.0             // progress of the current stage, 0...100
@@ -194,6 +195,7 @@ extension Job {
         error = try c.decodeIfPresent(String.self, forKey: .error)
         try c.update(&outputs, .outputs)
         try c.update(&downloads, .downloads)
+        try c.update(&source, .source)
         try c.update(&log, .log)
         try c.update(&created, .created)
     }
