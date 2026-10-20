@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -31,13 +32,14 @@ var toolNames = []string{toolYtdlp, toolHandbrake, toolFfmpeg}
 
 // ToolStatus is what the UI shows for one managed tool.
 type ToolStatus struct {
-	Name      string `json:"name"`
-	Installed bool   `json:"installed"`
-	Version   string `json:"version,omitempty"`
-	Latest    string `json:"latest,omitempty"`
-	Update    bool   `json:"updateAvailable"`
-	Busy      bool   `json:"busy"`
-	Error     string `json:"error,omitempty"`
+	Name       string `json:"name"`
+	Installed  bool   `json:"installed"`
+	Version    string `json:"version,omitempty"`
+	Latest     string `json:"latest,omitempty"`
+	Update     bool   `json:"updateAvailable"`
+	CheckError string `json:"checkError,omitempty"` // why the newest version could not be looked up
+	Busy       bool   `json:"busy"`
+	Error      string `json:"error,omitempty"`
 }
 
 type tools struct {
@@ -113,15 +115,45 @@ func (t *tools) status(ctx context.Context, checkLatest bool) []ToolStatus {
 		if isSystemTool(n) && !s.Installed && s.Error == "" {
 			s.Error = systemToolHint(n)
 		}
-		if checkLatest && !isSystemTool(n) {
-			if v, err := t.latest(ctx, n); err == nil {
-				s.Latest = v
-				s.Update = s.Installed && v != s.Version
-			}
-		}
 		out = append(out, s)
 	}
+	if checkLatest {
+		// Every lookup at once; a failure is kept for that tool instead of being dropped.
+		var wg sync.WaitGroup
+		for i := range out {
+			if isSystemTool(out[i].Name) {
+				continue
+			}
+			wg.Add(1)
+			go func(s *ToolStatus) {
+				defer wg.Done()
+				v, err := t.latest(ctx, s.Name)
+				if err != nil {
+					s.CheckError = checkMessage(err)
+					return
+				}
+				s.Latest = v
+				s.Update = s.Installed && v != s.Version
+			}(&out[i])
+		}
+		wg.Wait()
+	}
 	return out
+}
+
+// checkMessage puts a failed lookup in words a person can act on.
+func checkMessage(err error) string {
+	msg := err.Error()
+	var ne net.Error
+	switch {
+	case errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &ne) && ne.Timeout()):
+		return "The server did not answer in time."
+	case strings.Contains(msg, ": 403") || strings.Contains(msg, ": 429"):
+		return "GitHub is limiting requests right now. Try again in a few minutes."
+	case errors.As(err, &ne):
+		return "No internet connection, or the server could not be reached."
+	}
+	return msg
 }
 
 type ghRelease struct {

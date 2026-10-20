@@ -33,8 +33,12 @@
       <section class="panel adv-only">
         <div class="panel-head">
           <h2>Tools</h2>
-          <button id="check" class="link" type="button">Check for updates</button>
+          <span class="panel-actions">
+            <button id="update-all" class="link" type="button" hidden>Update all</button>
+            <button id="check" class="btn small" type="button">Check for updates</button>
+          </span>
         </div>
+        <p id="tools-summary" class="hint" aria-live="polite"></p>
         <div id="tools"></div>
       </section>
     </aside>

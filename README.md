@@ -53,6 +53,14 @@ until the conversion succeeds, and remembers it. Press **Try again** and it carr
 conversion instead of downloading again. Removing the job deletes the kept file. You can turn this
 off under **Advanced → Download**.
 
+**Updates.** Under **Advanced → Tools**, **Check for Updates** shows what is installed next to the
+newest version of GetVideo, yt-dlp, HandBrake and ffmpeg, with an **Update** button for each (and
+**Update All**). The Mac app also checks for a new version of itself when it opens: press **Update
+and Restart** and it downloads the new version, checks it against the published checksum,
+replaces itself and reopens. It waits until the queue is empty. Self-update needs GetVideo to be
+in your Applications folder, and starts with the first release that includes it; earlier
+versions need one manual download.
+
 On first start GetVideo downloads the tools it needs (yt-dlp, HandBrakeCLI and ffmpeg) into its
 own folder and keeps them up to date. It runs entirely on your Mac: no account, no upload, no
 tracking.

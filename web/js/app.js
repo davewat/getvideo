@@ -253,8 +253,12 @@ let tools = []
 let pollTimer = null
 let presetsLoadedFor = null
 
+let checking = false
+let lastChecked = null
+
 async function refreshTools(check = false) {
   try { tools = await api.tools(check) } catch { return }
+  if (check && tools.some((t) => t.latest && !t.checkError)) lastChecked = new Date()
   renderTools()
   renderNotice()
   const busy = tools.some((t) => t.busy)
@@ -268,17 +272,64 @@ async function refreshTools(check = false) {
   }
 }
 
+// The "Check for updates" button: look up the newest versions and show them beside what is installed.
+async function checkForUpdates() {
+  if (checking) return
+  checking = true
+  renderTools()
+  try { await refreshTools(true) } finally {
+    checking = false
+    renderTools()
+  }
+}
+
+// updateAll installs every tool that has a newer version.
+async function updateAll() {
+  await Promise.all(tools.filter((t) => t.updateAvailable).map((t) => api.install(t.name).catch(() => {})))
+  refreshTools()
+}
+
+// One line saying how the last check went.
+function toolsSummary() {
+  if (checking) return ['Looking for newer versions…', '']
+  const failed = tools.filter((t) => t.checkError)
+  if (failed.length && !tools.some((t) => t.latest)) { // every lookup failed
+    return [`Could not check for updates. ${failed[0].checkError}`, 'bad']
+  }
+  if (!lastChecked) return ['Press Check for updates to see the newest versions.', '']
+  const n = tools.filter((t) => t.updateAvailable).length
+  const time = lastChecked.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  let text = n === 0 ? `Everything is up to date. Checked at ${time}.` : `${n} update${n === 1 ? '' : 's'} available. Checked at ${time}.`
+  if (failed.length) text += ` Could not check ${failed.map((t) => t.name).join(', ')}.`
+  return [text, n === 0 && !failed.length ? 'ok' : '']
+}
+
 function renderTools() {
+  const check = $('#check')
+  check.disabled = checking
+  check.textContent = checking ? 'Checking…' : 'Check for updates'
+  const outdated = tools.filter((t) => t.updateAvailable).length
+  $('#update-all').hidden = outdated < 2
+  const [summary, kind] = toolsSummary()
+  $('#tools-summary').textContent = summary
+  $('#tools-summary').dataset.kind = kind
+
   $('#tools').replaceChildren(...tools.map((t) => {
     const state = t.busy ? 'busy' : !t.installed ? 'missing' : t.updateAvailable ? 'update' : 'ok'
-    const status = t.busy ? 'Installing…' : !t.installed ? 'Not installed' : t.updateAvailable ? `${t.version} → ${t.latest}` : t.version
-    const action = !t.installed ? 'Install' : t.updateAvailable ? 'Update' : 'Reinstall'
+    const verdict = { busy: 'Installing…', missing: 'Not installed', update: 'Update available', ok: t.latest ? 'Up to date' : '' }[state]
+    const latest = t.latest || (t.checkError ? 'could not check' : 'not checked yet')
     return h('div', { class: 'tool', 'data-state': state },
       h('span', { class: 'dot' }),
-      h('div', { class: 'tool-text' }, h('b', {}, t.name), h('span', { class: 'mono' }, status),
+      h('div', { class: 'tool-text' }, h('b', {}, t.name),
+        h('span', { class: 'ver-line' }, h('i', {}, 'Installed'), h('span', { class: 'mono' }, t.installed ? (t.version || 'installed') : 'not installed')),
+        h('span', { class: `ver-line${state === 'update' ? ' newer' : ''}` }, h('i', {}, 'Latest'), h('span', { class: 'mono' }, latest)),
+        t.checkError && !t.latest ? h('span', { class: 'error' }, t.checkError) : null,
         t.error && !t.busy ? h('span', { class: 'error' }, t.error) : null),
-      h('button', { class: state === 'ok' ? 'link' : 'btn small', type: 'button', disabled: t.busy,
-        onclick: async () => { await api.install(t.name); refreshTools() } }, action))
+      h('div', { class: 'tool-side' },
+        verdict ? h('span', { class: 'verdict' }, verdict) : null,
+        h('button', { class: state === 'ok' ? 'link' : state === 'update' ? 'btn small primary-small' : 'btn small', type: 'button', disabled: t.busy,
+          onclick: async () => { await api.install(t.name); refreshTools() } },
+        !t.installed ? 'Install' : t.updateAvailable ? `Update to ${t.latest}` : 'Reinstall')))
   }))
 }
 
@@ -465,7 +516,8 @@ async function start() {
   } catch { /* fall back to the built-in defaults */ }
   buildForm()
   document.querySelectorAll('.seg button').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.mode)))
-  $('#check').addEventListener('click', () => refreshTools(true))
+  $('#check').addEventListener('click', checkForUpdates)
+  $('#update-all').addEventListener('click', updateAll)
   $('#clear').addEventListener('click', () => {
     for (const r of rows.values()) if (!isActive(r.job.status)) api.remove(r.job.id).catch(() => {})
   })

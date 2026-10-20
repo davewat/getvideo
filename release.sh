@@ -45,8 +45,12 @@ APPZIP="dist/GetVideo-mac-native.zip"
 rm -f "$APPZIP"
 ditto -c -k --sequesterRsrc --keepParent dist/GetVideo.app "$APPZIP"
 
+# The Mac app checks its update against this file before installing it.
+(cd dist && shasum -a 256 "$(basename "$APPZIP")" "$(basename "$ZIP")" "$(basename "$WINZIP")" "$(basename "$LINUXTAR")" > SHA256SUMS)
+
 echo "==> publishing"
 git push origin "$VERSION"
 # The text after # is the name shown on the release page.
 gh release create "$VERSION" "$APPZIP#Mac Native (preferred)" "$ZIP#Mac Go version" \
-	"$WINZIP#Windows Go version (untested)" "$LINUXTAR#Ubuntu Go version (untested)" --title "GetVideo $VERSION" --generate-notes
+	"$WINZIP#Windows Go version (untested)" "$LINUXTAR#Ubuntu Go version (untested)" \
+	"dist/SHA256SUMS#Checksums (SHA-256)" --title "GetVideo $VERSION" --generate-notes

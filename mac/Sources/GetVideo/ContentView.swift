@@ -27,6 +27,7 @@ enum Pane: String, CaseIterable, Identifiable {
 struct ContentView: View {
     @EnvironmentObject private var tools: ToolManager
     @EnvironmentObject private var queue: JobQueue
+    @EnvironmentObject private var updater: AppUpdater
     /// Always opens on GetVideo; GETVIDEO_PANE=advanced overrides that for testing.
     @State private var pane = Pane(rawValue: ProcessInfo.processInfo.environment["GETVIDEO_PANE"] ?? "") ?? .getVideo
     @StateObject private var form = LinkForm()
@@ -50,6 +51,7 @@ struct ContentView: View {
             .navigationSplitViewColumnWidth(min: 160, ideal: 190, max: 260)
         } detail: {
             VStack(spacing: 0) {
+                UpdateBanner(isEasy: pane == .getVideo)
                 if pane != .about { NoticeBanner(isEasy: pane == .getVideo) }
                 switch pane {
                 case .getVideo: EasyView(expanded: $expanded) { pane = .advanced }
@@ -67,6 +69,8 @@ struct ContentView: View {
             // Show what is installed at once, then install what is missing and update what is stale.
             await tools.refresh(checkLatest: false)
             await tools.autoUpdate()
+            await updater.check(silent: true) // is there a newer GetVideo?
+            await DevHooks.updateIfAsked(updater)
         }
     }
 }

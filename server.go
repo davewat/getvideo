@@ -37,7 +37,7 @@ func httpErr(w http.ResponseWriter, code int, err error) {
 func (s *server) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/tools", func(w http.ResponseWriter, r *http.Request) {
-		ctx, c := context.WithTimeout(r.Context(), 15*time.Second)
+		ctx, c := context.WithTimeout(r.Context(), 20*time.Second)
 		defer c()
 		writeJSON(w, 200, s.tools.status(ctx, r.URL.Query().Get("check") == "1"))
 	})

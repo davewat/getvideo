@@ -11,15 +11,29 @@ final class ToolManager: ObservableObject {
     @Published private(set) var presets: [PresetGroup] = []
     /// False until the first `refresh` has finished, so the UI can tell "unknown" from "missing".
     @Published private(set) var loaded = false
+    /// True while the newest versions are being looked up.
+    @Published private(set) var checking = false
+    /// When the newest versions were last looked up successfully; nil until then.
+    @Published private(set) var lastChecked: Date?
 
     private let binDir: URL
     private let installer: ToolInstaller
     /// The HandBrakeCLI version `presets` was read from; nil until they have been read.
     private var presetsVersion: String?
 
-    init(binDir: URL = AppPaths.bin) {
+    /// How the newest version of a tool is found and how a tool is installed. Both are the real
+    /// network work unless a test replaces them.
+    private let lookupLatest: @Sendable (ToolName) async throws -> String
+    private let performInstall: @Sendable (ToolName) async throws -> String
+
+    init(binDir: URL = AppPaths.bin,
+         lookupLatest: (@Sendable (ToolName) async throws -> String)? = nil,
+         performInstall: (@Sendable (ToolName) async throws -> String)? = nil) {
         self.binDir = binDir
         installer = ToolInstaller(binDir: binDir)
+        let installer = installer
+        self.lookupLatest = lookupLatest ?? { try await installer.latest($0) }
+        self.performInstall = performInstall ?? { try await installer.install($0) }
         try? FileManager.default.createDirectory(at: binDir, withIntermediateDirectories: true)
     }
 
@@ -32,20 +46,32 @@ final class ToolManager: ObservableObject {
     func refresh(checkLatest: Bool) async {
         readInstalled()
         await loadPresets()
-        if checkLatest {
-            // A failed check leaves `latest` as it was: being offline is not an error.
-            let installer = installer
-            await withTaskGroup(of: (ToolName, String?).self) { group in
-                for name in ToolName.allCases {
-                    group.addTask { (name, try? await installer.latest(name)) }
-                }
-                for await (name, version) in group {
-                    if let version, !version.isEmpty { update(name) { $0.latest = version } }
-                }
-            }
-        }
+        if checkLatest { await lookUpLatest() }
         loaded = true
     }
+
+    /// The "Check for Updates" button: looks up the newest version of every tool, so the panel can
+    /// show what is installed next to what is available. Failures are kept per tool, not hidden.
+    func checkForUpdates() async {
+        guard !checking else { return }
+        checking = true
+        defer { checking = false }
+        readInstalled()
+        await lookUpLatest()
+    }
+
+    /// Updates every tool that has a newer version, all at once.
+    func updateAll() async {
+        let outdated = tools.filter(\.updateAvailable).map(\.name)
+        await withTaskGroup(of: Void.self) { group in
+            for name in outdated {
+                group.addTask { await self.install(name) }
+            }
+        }
+    }
+
+    /// How many installed tools have a newer version.
+    var updatesAvailable: Int { tools.filter(\.updateAvailable).count }
 
     /// Downloads (or updates) one tool. Failures land in that tool's `error`, never thrown.
     func install(_ name: ToolName) async {
@@ -56,7 +82,7 @@ final class ToolManager: ObservableObject {
         }
         var failure: String?
         do {
-            let version = try await installer.install(name)
+            let version = try await performInstall(name)
             // What was just installed is the newest there is, whatever the last check said.
             update(name) { $0.latest = version }
         } catch {
@@ -82,6 +108,51 @@ final class ToolManager: ObservableObject {
     }
 
     // MARK: Private
+
+    /// Asks for the newest version of every tool at once. A tool whose lookup fails keeps its error
+    /// (and its last known newest version); the time of the check is recorded only if one worked.
+    private func lookUpLatest() async {
+        let lookup = lookupLatest
+        var anySucceeded = false
+        await withTaskGroup(of: (ToolName, String?, String?).self) { group in
+            for name in ToolName.allCases {
+                group.addTask {
+                    do { return (name, try await lookup(name), nil) } catch { return (name, nil, Self.checkMessage(error)) }
+                }
+            }
+            for await (name, version, failure) in group {
+                if let version, !version.isEmpty {
+                    update(name) {
+                        $0.latest = version
+                        $0.checkError = nil
+                    }
+                    anySucceeded = true
+                } else {
+                    update(name) { $0.checkError = failure ?? "No version was reported." }
+                }
+            }
+        }
+        if anySucceeded { lastChecked = Date() }
+    }
+
+    /// A lookup failure in words a person can act on.
+    nonisolated static func checkMessage(_ error: Error) -> String {
+        if let e = error as? URLError {
+            switch e.code {
+            case .notConnectedToInternet, .networkConnectionLost, .dataNotAllowed:
+                return "No internet connection."
+            case .timedOut:
+                return "The server did not answer in time."
+            default:
+                break
+            }
+        }
+        let text = error.localizedDescription
+        if text.contains("GitHub answered 403") || text.contains("GitHub answered 429") {
+            return "GitHub is limiting requests right now. Try again in a few minutes."
+        }
+        return text
+    }
 
     private func update(_ name: ToolName, _ change: (inout Tool) -> Void) {
         guard let i = tools.firstIndex(where: { $0.name == name }) else { return }

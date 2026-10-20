@@ -18,6 +18,7 @@ struct GetVideoApp: App {
     @StateObject private var settings: SettingsStore
     @StateObject private var tools: ToolManager
     @StateObject private var queue: JobQueue
+    @StateObject private var updater = AppUpdater()
 
     init() {
         // The queue runs the tools the manager installs, so both are built from the same instance.
@@ -33,6 +34,7 @@ struct GetVideoApp: App {
                 .environmentObject(settings)
                 .environmentObject(tools)
                 .environmentObject(queue)
+                .environmentObject(updater)
                 .frame(minWidth: 720, minHeight: 480)
                 .onAppear {
                     delegate.queue = queue

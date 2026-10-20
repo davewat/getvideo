@@ -207,3 +207,21 @@ textarea { resize: vertical; display: block; }
 .tool[data-state=update] .dot { background: var(--bar-yellow); }
 .tool[data-state=busy] .dot { background: var(--bar-blue); animation: pulse 1s infinite; }
 @keyframes pulse { 50% { opacity: .25; } }
+
+/* ---- tools: installed next to newest ---- */
+.panel-actions { display: flex; align-items: center; gap: 10px; }
+#tools-summary { margin: -4px 0 12px; }
+#tools-summary[data-kind=ok] { color: var(--bar-green); }
+#tools-summary[data-kind=bad] { color: var(--bar-red); }
+.tool { align-items: flex-start; }
+.tool .dot { margin-top: 7px; }
+.ver-line { display: flex; gap: 8px; align-items: baseline; font-size: 12px; }
+.ver-line i { font-style: normal; color: var(--soft); width: 58px; font-size: 11px; }
+.ver-line .mono { color: var(--soft); overflow-wrap: anywhere; }
+.ver-line.newer .mono { color: var(--ink); font-weight: 600; }
+.tool-side { display: grid; justify-items: end; gap: 4px; }
+.verdict { font-size: 11px; color: var(--soft); }
+.tool[data-state=update] .verdict { color: var(--bar-yellow); }
+.tool[data-state=ok] .verdict { color: var(--bar-green); }
+.tool[data-state=missing] .verdict { color: var(--bar-red); }
+.primary-small { background: var(--ink); border-color: var(--ink); color: var(--deck); }

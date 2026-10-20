@@ -215,6 +215,7 @@ struct Tool: Identifiable, Equatable {
     var latest = ""               // "" until an update check succeeds
     var busy = false              // an install or update is running
     var error: String?            // why the last install attempt failed
+    var checkError: String?       // why the last look for a newer version failed
     var id: String { name.rawValue }
     var updateAvailable: Bool { installed && !latest.isEmpty && latest != version }
 }
