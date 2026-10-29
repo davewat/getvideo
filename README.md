@@ -67,22 +67,26 @@ tracking.
 
 ## Install
 
-GetVideo is not signed with Apple yet, so the first time you open it macOS asks you to allow it.
-You only do this once.
+GetVideo is not signed with Apple yet, so macOS blocks it until you allow it. One line in
+Terminal does that, once.
 
-1. **Download.** [Click here to download GetVideo](https://github.com/davewat/getvideo/releases/latest/download/GetVideo-mac-native.zip).
+1. **Download.** [Click here to download the latest GetVideo](https://github.com/davewat/getvideo/releases/latest/download/GetVideo-mac-native.zip).
    Safari unzips it for you; in other browsers, double-click the zip in your Downloads folder.
 2. **Copy it to your Applications folder.** Drag **GetVideo** from Downloads into **Applications**.
-3. **Open it, and close the warning.** Double-click GetVideo. macOS says it could not verify the
-   app. Click **Done** (on older versions of macOS the button is **Cancel** or **OK**). Do not
-   click Move to Trash.
-4. **Allow it.** Click the Apple menu, then **System Settings**, then **Privacy & Security**.
-   Scroll down to **Security**. Next to "GetVideo was blocked", click **Open Anyway**.
-5. **Enter your password.** macOS asks for your Mac password (or Touch ID) to confirm.
-6. **Open GetVideo again.** Double-click it in Applications once more, and it opens.
+3. **Allow it to run.** Open Terminal (press ⌘ Space, type Terminal, press Return), paste this
+   line and press Return. Nothing is printed when it works:
 
-From now on it opens like any other app. The first start takes about a minute
-while it installs its tools. It needs macOS 14 or later.
+       xattr -dr com.apple.quarantine /Applications/GetVideo.app
+
+4. **Open GetVideo.** Double-click it in Applications.
+
+The first start takes about a minute while it installs its tools. After that it opens like any
+other app, and it updates itself. It needs macOS 14 or later. Run the line again after each
+manual download; the app's own **Update and Restart** button does not need it.
+
+*Prefer not to use Terminal?* Double-click GetVideo, click **Done** on the warning, then open
+**Apple menu → System Settings → Privacy & Security**, scroll to **Security**, click **Open
+Anyway** next to "GetVideo was blocked", enter your password, and open GetVideo again.
 
 **Prefer the browser version?** The Mac Go version runs in your browser instead.
 [Download it](https://github.com/davewat/getvideo/releases/latest/download/getvideo-mac-go.zip),
