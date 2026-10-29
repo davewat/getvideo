@@ -34,6 +34,11 @@
           <a class="btn primary" href="https://github.com/davewat/getvideo/releases/latest/download/GetVideo-mac-native.zip">Download for Mac</a>
           <span class="meta"><span id="version">Latest release</span> · macOS 14 or later · MIT licence</span>
         </div>
+        <div class="allow">
+          <p><b>After it downloads,</b> drag GetVideo into Applications, then run this once in Terminal so macOS lets it open:</p>
+          <div class="cmd"><code>xattr -dr com.apple.quarantine /Applications/GetVideo.app</code><button type="button" class="copy" data-copy="xattr -dr com.apple.quarantine /Applications/GetVideo.app">Copy</button></div>
+          <p class="how">Press <kbd>⌘</kbd> <kbd>Space</kbd>, type <b>Terminal</b>, press Return, paste the line, press Return. <a href="#install">Step by step</a></p>
+        </div>
         <p class="edu">For educational use only.</p>
         <p class="alt">Made for the Mac. <a href="#other">Untested builds for Windows and Ubuntu</a> are also available.</p>
       </div>
@@ -145,33 +150,35 @@
 
     <section class="block" id="install">
       <h2>Install</h2>
-      <p class="intro">GetVideo is not signed with Apple yet, so the first time you open it macOS asks you to allow it. You only do this once.</p>
+      <p class="intro">GetVideo is not signed with Apple yet, so macOS blocks it until you allow it. One line in Terminal does that, once.</p>
       <ol class="steps">
         <li>
           <h3>Download</h3>
-          <p><a href="https://github.com/davewat/getvideo/releases/latest/download/GetVideo-mac-native.zip">Click here to download GetVideo</a>. Safari unzips it for you; in other browsers, double-click the zip in your Downloads folder.</p>
+          <p><a href="https://github.com/davewat/getvideo/releases/latest/download/GetVideo-mac-native.zip">Click here to download the latest GetVideo</a>. Safari unzips it for you; in other browsers, double-click the zip in your Downloads folder.</p>
         </li>
         <li>
           <h3>Copy it to your Applications folder</h3>
           <p>Drag <b>GetVideo</b> from Downloads into <b>Applications</b>.</p>
         </li>
         <li>
-          <h3>Open it, and close the warning</h3>
-          <p>Double-click GetVideo. macOS says it could not verify the app. Click <b>Done</b> (on older versions of macOS the button is <b>Cancel</b> or <b>OK</b>). Do not click Move to Trash.</p>
+          <h3>Allow it to run</h3>
+          <p>Open Terminal (press <kbd>⌘</kbd> <kbd>Space</kbd>, type <b>Terminal</b>, press Return). Paste this line and press Return. Nothing is printed when it works.</p>
+          <div class="cmd"><code>xattr -dr com.apple.quarantine /Applications/GetVideo.app</code><button type="button" class="copy" data-copy="xattr -dr com.apple.quarantine /Applications/GetVideo.app">Copy</button></div>
         </li>
         <li>
-          <h3>Allow it</h3>
-          <p>Click the Apple menu, then <b>System Settings</b>, then <b>Privacy &amp; Security</b>. Scroll down to <b>Security</b>. Next to "GetVideo was blocked", click <b>Open Anyway</b>.</p>
-        </li>
-        <li>
-          <h3>Enter your password</h3>
-          <p>macOS asks for your Mac password (or Touch ID) to confirm.</p>
-        </li>
-        <li>
-          <h3>Open GetVideo again</h3>
-          <p>Double-click it in Applications once more, and it opens. From now on it opens like any other app. The first start takes about a minute while it installs its tools.</p>
+          <h3>Open GetVideo</h3>
+          <p>Double-click it in Applications. The first start takes about a minute while it installs its tools. After that it opens like any other app, and updates itself.</p>
         </li>
       </ol>
+      <details class="fallback">
+        <summary>Prefer not to use Terminal?</summary>
+        <ol>
+          <li>Double-click GetVideo in Applications. macOS says it could not verify the app. Click <b>Done</b> (on older versions of macOS the button is <b>Cancel</b> or <b>OK</b>). Do not click Move to Trash.</li>
+          <li>Click the Apple menu, then <b>System Settings</b>, then <b>Privacy &amp; Security</b>. Scroll down to <b>Security</b>. Next to "GetVideo was blocked", click <b>Open Anyway</b>.</li>
+          <li>Enter your Mac password (or Touch ID) when asked, then double-click GetVideo again.</li>
+        </ol>
+      </details>
+      <p class="note">New downloads of a manual update are blocked the same way, so run the line again after each manual download. The app's own <b>Update and Restart</b> button does not need it.</p>
       <p class="note">Prefer to run it in your browser? <a href="https://github.com/davewat/getvideo/releases/latest/download/getvideo-mac-go.zip">Download the Mac Go version</a> and follow the <a href="https://github.com/davewat/getvideo#install">instructions in the README</a>.</p>
     </section>
     <section class="block" id="other">

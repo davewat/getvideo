@@ -65,3 +65,22 @@ fetch('https://api.github.com/repos/davewat/getvideo/releases/latest')
   .then((r) => (r.ok ? r.json() : null))
   .then((rel) => { if (rel?.tag_name) $('version').textContent = rel.tag_name })
   .catch(() => {})
+
+// "Copy" buttons next to the Terminal command.
+document.querySelectorAll('.copy').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    const text = btn.dataset.copy
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      // Clipboard blocked: select the command so it can be copied by hand.
+      const code = btn.previousElementSibling
+      const range = document.createRange()
+      range.selectNodeContents(code)
+      getSelection().removeAllRanges()
+      getSelection().addRange(range)
+    }
+    btn.textContent = 'Copied'
+    setTimeout(() => { btn.textContent = 'Copy' }, 2000)
+  })
+})

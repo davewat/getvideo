@@ -172,3 +172,20 @@ nav a { white-space: nowrap; }
 }
 .others { margin-top: 36px; display: grid; gap: 3px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
 .others article { display: grid; gap: 12px; align-content: start; padding: 26px 24px 24px; background: var(--deck); border-top: 9px solid var(--line); min-width: 0; }
+
+/* ---- the Terminal command that lets macOS open the app ---- */
+.allow { margin-top: 26px; max-width: 34em; display: grid; gap: 10px; padding: 16px 18px; background: var(--deck); border: 1px solid var(--line); border-left: 5px solid var(--bar-yellow); border-radius: 8px; }
+.allow p { font-size: 15px; line-height: 1.5; }
+.allow .how { color: var(--soft); font-size: 13px; }
+.cmd { display: flex; align-items: stretch; gap: 0; min-width: 0; border-radius: 8px; overflow: hidden; background: var(--ink); }
+.cmd code { flex: 1; min-width: 0; padding: 12px 14px; color: var(--deck); font-size: 13px; overflow-x: auto; white-space: nowrap; user-select: all; }
+.copy { flex: none; padding: 0 16px; border: 0; border-left: 1px solid color-mix(in srgb, var(--deck) 25%, transparent); background: color-mix(in srgb, var(--deck) 14%, var(--ink)); color: var(--deck); font: 600 13px var(--mono); cursor: pointer; }
+.copy:hover { background: color-mix(in srgb, var(--deck) 24%, var(--ink)); }
+.copy:focus-visible { outline: 2px solid var(--bar-blue); outline-offset: -2px; }
+kbd { padding: 1px 6px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; background: var(--well); font: 12px var(--mono); }
+.steps .cmd { margin-top: 4px; }
+.fallback { margin-top: 28px; max-width: 46em; border: 1px solid var(--line); border-radius: 8px; padding: 0 16px; background: var(--deck); }
+.fallback summary { cursor: pointer; padding: 12px 0; font-weight: 600; }
+.fallback summary:focus-visible { outline: 2px solid var(--bar-blue); outline-offset: 2px; border-radius: 4px; }
+.fallback ol { margin: 0; padding: 0 0 14px 20px; display: grid; gap: 8px; color: var(--soft); }
+@media (max-width: 560px) { .cmd code { white-space: normal; overflow-wrap: anywhere; } }
