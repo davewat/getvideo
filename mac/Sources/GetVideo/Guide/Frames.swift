@@ -12,8 +12,14 @@ enum Frames {
     static func args(stream: String, headers: [String: String], at seconds: Int, out: URL) -> [String] {
         var a = ["-nostdin", "-loglevel", "error"]
         if !headers.isEmpty {
-            a += ["-headers", headers.sorted { $0.key < $1.key }.map { "\($0.key): \($0.value)\r\n" }.joined()]
+            // "\r\n" is a single Character, so filter the scalars.
+            func clean(_ text: String) -> String {
+                String(String.UnicodeScalarView(text.unicodeScalars.filter { $0 != "\r" && $0 != "\n" }))
+            }
+            a += ["-headers", headers.sorted { $0.key < $1.key }.map { "\(clean($0.key)): \(clean($0.value))\r\n" }.joined()]
         }
+        // Only web protocols, so a playlist cannot point ffmpeg at a local file.
+        a += ["-protocol_whitelist", "http,https,tcp,tls,crypto"]
         // -ss before -i seeks in the stream instead of reading up to it.
         a += ["-ss", String(seconds), "-i", stream, "-frames:v", "1", "-vf", "scale='min(1280,iw)':-2", "-q:v", "4", "-y", out.path]
         return a
@@ -25,6 +31,7 @@ enum Frames {
                      progress: @MainActor (Int, Int) -> Void = { _, _ in },
                      run: Runner = live) async throws -> [Int: Data] {
         var images: [Int: Data] = [:]
+        guard let scheme = URL(string: stream)?.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return images }
         var failed = 0
         for (n, t) in times.enumerated() {
             try Task.checkCancellation()

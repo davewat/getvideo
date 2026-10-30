@@ -17,7 +17,7 @@ enum LLMHTTP {
 
     /// Seconds to wait before the next try: what the service asks for, else 2, 4, 8, at most 30.
     @Sendable static func defaultWait(attempt: Int, response: HTTPURLResponse) -> TimeInterval {
-        if let asked = response.value(forHTTPHeaderField: "retry-after").flatMap(Double.init) { return min(max(asked, 0), 30) }
+        if let asked = response.value(forHTTPHeaderField: "retry-after").flatMap(Double.init), asked.isFinite, asked >= 0 { return min(asked, 30) }
         return min(Double(1 << attempt) * 2, 30)
     }
 
@@ -41,7 +41,9 @@ enum LLMHTTP {
             case 200..<300:
                 return data
             case 429 where attempt < attempts:
-                try await Task.sleep(nanoseconds: UInt64(wait(attempt, http) * 1_000_000_000))
+                var seconds = wait(attempt, http)
+                if !seconds.isFinite || seconds < 0 { seconds = 2 }
+                try await Task.sleep(nanoseconds: UInt64(min(seconds, 30) * 1_000_000_000))
                 attempt += 1
             case 401, 403:
                 throw LLMError(message: "\(provider) rejected the API key (error \(http.statusCode)). Check the key in Advanced > Guide. \(detail(data))")
