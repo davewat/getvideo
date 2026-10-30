@@ -39,9 +39,15 @@ extension Font {
 
 enum Stage: CaseIterable {
     case download, convert, save
+    // the stages of a guide
+    case captions, write, shots, render
 
     var label: String {
         switch self {
+        case .captions: "Captions"
+        case .write: "Write"
+        case .shots: "Screenshots"
+        case .render: "PDF"
         case .download: "Download"
         case .convert: "Convert"
         case .save: "Save"
@@ -50,6 +56,10 @@ enum Stage: CaseIterable {
 
     var color: Color {
         switch self {
+        case .captions: .barCyan
+        case .write: .barYellow
+        case .shots: .barBlue
+        case .render: .barMagenta
         case .download: .barCyan
         case .convert: .barMagenta
         case .save: .barGreen

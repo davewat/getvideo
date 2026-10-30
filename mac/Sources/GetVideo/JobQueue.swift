@@ -7,6 +7,16 @@ struct JobError: LocalizedError, Equatable {
     var errorDescription: String? { message }
 }
 
+/// What a guide job needs from outside the app: the API key, the model and the PDF printer.
+/// Replaced in tests.
+struct GuideServices {
+    var apiKey: (String) -> String? = { Keychain.get($0) }
+    var client: (GuideOptions, String) -> LLMClient = { $0.makeClient(apiKey: $1) }
+    var render: @MainActor (String, URL) async throws -> Void = { try await GuidePDF.render(html: $0, to: $1) }
+
+    static let live = GuideServices()
+}
+
 /// Runs jobs one at a time, oldest first: download -> convert -> save. A port of jobs.go.
 @MainActor
 final class JobQueue: ObservableObject {
@@ -19,6 +29,7 @@ final class JobQueue: ObservableObject {
     private let tools: ToolManager
     private let jobsFile: URL
     private let legacyWorkDir: URL
+    private let guide: GuideServices
     /// The loop that works through queued jobs; nil while there is nothing to do.
     private var runner: Task<Void, Never>?
     /// The job being processed and the Task running its pipeline (cancelling it stops the process).
@@ -27,17 +38,19 @@ final class JobQueue: ObservableObject {
     private var stopped = false
 
     /// `legacyWorkDir` is where earlier versions kept temporary files; it is only ever emptied.
-    init(tools: ToolManager, jobsFile: URL = AppPaths.jobsFile, legacyWorkDir: URL = AppPaths.work) {
+    init(tools: ToolManager, jobsFile: URL = AppPaths.jobsFile, legacyWorkDir: URL = AppPaths.work,
+         guide: GuideServices = .live) {
         self.tools = tools
         self.jobsFile = jobsFile
         self.legacyWorkDir = legacyWorkDir
+        self.guide = guide
         let fm = FileManager.default
 
         if let data = try? Data(contentsOf: jobsFile), let saved = try? JSONDecoder().decode([Job].self, from: data) {
             jobs = saved
         }
         var changed = false
-        for i in jobs.indices where [.downloading, .converting, .saving].contains(jobs[i].status) {
+        for i in jobs.indices where [.downloading, .converting, .saving, .writing, .capturing, .rendering].contains(jobs[i].status) {
             Self.discardWork(for: jobs[i]) // what it left behind in its working folder
             jobs[i].status = .failed
             jobs[i].error = Self.interruptedMessage
@@ -88,6 +101,28 @@ final class JobQueue: ObservableObject {
         var job = Job(url: "", title: (expanded as NSString).lastPathComponent, settings: s)
         job.source = expanded
         jobs.append(job)
+        persist()
+        startRunner()
+    }
+
+    /// Queues one guide job per URL: a PDF written by an AI model from the video's captions. Throws
+    /// (with a message fit to show the user) if a URL or option is invalid or there is no API key.
+    func addGuide(urls: [String], settings: Settings) throws {
+        let cleaned = urls.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        guard !cleaned.isEmpty else { throw JobError(message: "Enter a video link first") }
+        for url in cleaned where !(url.hasPrefix("http://") || url.hasPrefix("https://")) {
+            throw JobError(message: "\"\(url)\" is not a link: it must start with http:// or https://")
+        }
+        try Args.guide(settings.guide)
+        guard guide.apiKey(settings.guide.provider) != nil || settings.guide.isLocal else {
+            let who = settings.guide.provider == "anthropic" ? "Anthropic" : "AI service"
+            throw JobError(message: "A guide needs an API key. Paste your \(who) key in Advanced > Guide first.")
+        }
+        for url in cleaned {
+            var job = Job(url: url, title: url, settings: settings)
+            job.guide = true
+            jobs.append(job)
+        }
         persist()
         startRunner()
     }
@@ -205,17 +240,13 @@ final class JobQueue: ObservableObject {
         persist()
     }
 
-    private func pipeline(_ id: UUID, work: URL) async throws {
-        guard let job = jobs.first(where: { $0.id == id }) else { return }
-        let settings = job.settings
+    /// Checks that the tools are installed and creates the folder the result is saved to and the
+    /// job's temporary folder.
+    private func prepare(_ needed: [ToolName], outDir: URL, work: URL) throws {
         let fm = FileManager.default
-
-        let local = !job.source.isEmpty
-        let needed: [ToolName] = local ? [.handbrake] : (settings.converts ? [.ytdlp, .ffmpeg, .handbrake] : [.ytdlp, .ffmpeg])
         for name in needed where !ToolInstaller.isFile(tools.path(name)) {
             throw JobError(message: "\(name.rawValue) is not installed (see Tools)")
         }
-        let outDir = Self.outputDir(settings.output.dir)
         do {
             try fm.createDirectory(at: outDir, withIntermediateDirectories: true)
         } catch {
@@ -226,6 +257,17 @@ final class JobQueue: ObservableObject {
         } catch {
             throw JobError(message: "Could not create temporary files in the working folder: \(error.localizedDescription)")
         }
+    }
+
+    private func pipeline(_ id: UUID, work: URL) async throws {
+        guard let job = jobs.first(where: { $0.id == id }) else { return }
+        if job.guide { return try await guidePipeline(id, job: job, work: work) }
+        let settings = job.settings
+
+        let local = !job.source.isEmpty
+        let needed: [ToolName] = local ? [.handbrake] : (settings.converts ? [.ytdlp, .ffmpeg, .handbrake] : [.ytdlp, .ffmpeg])
+        let outDir = Self.outputDir(settings.output.dir)
+        try prepare(needed, outDir: outDir, work: work)
 
         var files: [URL]
         if local {
@@ -285,6 +327,82 @@ final class JobQueue: ObservableObject {
         if let i = index(id) { jobs[i].outputs = outputs }
     }
 
+    // MARK: Guide
+
+    /// A guide: captions -> the model writes it -> screenshots -> PDF -> save.
+    private func guidePipeline(_ id: UUID, job: Job, work: URL) async throws {
+        let settings = job.settings
+        let g = settings.guide
+        let outDir = Self.outputDir(settings.output.dir)
+        try prepare([.ytdlp, .ffmpeg], outDir: outDir, work: work)
+
+        // Captions and the video's details
+        setStage(id, .downloading, percent: 0)
+        note(id, "Reading the video's details.")
+        let found = await Proc.capture(tools.path(.ytdlp), try Args.metadata(job.url))
+        try Task.checkCancellation()
+        guard found.status == 0 else {
+            let last = found.output.components(separatedBy: .newlines).last { $0.contains("ERROR") }
+            throw JobError(message: "yt-dlp: " + (last.map { $0.hasPrefix("ERROR: ") ? String($0.dropFirst(7)) : $0 } ?? "exited with code \(found.status)"))
+        }
+        let meta = try VideoMeta.parse(found.output)
+        if let i = index(id), !meta.title.isEmpty { jobs[i].title = meta.title }
+
+        note(id, "Getting the captions.")
+        let feed = makeFeed(id)
+        try await runStage("yt-dlp", tools.path(.ytdlp), try Args.captions(job.url, dir: work), feed) { feed.log($0) }
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: work.path)) ?? []
+        guard let file = Captions.pick(from: names) else {
+            throw JobError(message: "This video has no English captions, so a guide cannot be made from it.")
+        }
+        let cues = try Captions.parseJSON3(try Data(contentsOf: work.appendingPathComponent(file)))
+        guard !cues.isEmpty else { throw JobError(message: "The video's captions are empty, so a guide cannot be made from it.") }
+        let transcript = Captions.formatTranscript(cues)
+        try Task.checkCancellation()
+
+        // The model writes the guide
+        setStage(id, .writing, percent: 0)
+        guard let key = guide.apiKey(g.provider) ?? (g.isLocal ? "" : nil) else {
+            throw JobError(message: "No API key is set. Paste your key in Advanced > Guide, then try again.")
+        }
+        note(id, "Asking \(g.effectiveModel) to write the guide from \(cues.count) lines of captions. This takes a minute or two.")
+        let reply = try await guide.client(g, key).complete(
+            system: GuidePrompt.system(style: g.style, maxShots: g.effectiveShots),
+            user: GuidePrompt.user(title: meta.title, channel: meta.channel, duration: meta.duration, transcript: transcript),
+            maxTokens: GuidePrompt.maxTokens(for: transcript))
+        try Task.checkCancellation()
+        let parsed = GuideParser.parse(reply, duration: meta.duration, maxShots: g.effectiveShots)
+        guard !parsed.markdown.isEmpty || !parsed.tldr.isEmpty else { throw JobError(message: "The model's reply was empty") }
+
+        // Screenshots; a guide without pictures is still a guide
+        var images: [Int: Data] = [:]
+        if !parsed.shots.isEmpty {
+            setStage(id, .capturing, percent: 0)
+            if let stream = meta.streamURL {
+                images = try await Frames.grab(ffmpeg: tools.path(.ffmpeg), stream: stream, headers: meta.headers, times: parsed.shots, dir: work) { [weak self] done, total in
+                    guard let self, let i = self.index(id) else { return }
+                    self.jobs[i].percent = Double(done) / Double(max(total, 1)) * 100
+                }
+                note(id, "Took \(images.count) of \(parsed.shots.count) screenshots.")
+            } else {
+                note(id, "The video has no stream to take screenshots from; the guide has no pictures.")
+            }
+        }
+
+        // The page, printed to PDF
+        setStage(id, .rendering, percent: 0)
+        let html = GuideHTML.build(parsed, meta: meta, images: images, options: g)
+        let pdf = work.appendingPathComponent("guide.pdf")
+        try await guide.render(html, pdf)
+        try Task.checkCancellation()
+
+        setStage(id, .saving, percent: 100)
+        let name = Parsing.sanitize(settings.output.filename.isEmpty ? meta.title + " (guide)" : settings.output.filename)
+        let overwrite = settings.output.overwrite
+        let saved = try await Task.detached { try Parsing.move(pdf, into: outDir, name: name, overwrite: overwrite).path }.value
+        if let i = index(id) { jobs[i].outputs = [saved] }
+    }
+
     /// True when a failed or canceled job leaves its downloaded file in the working folder, so
     /// "Try again" continues from the conversion instead of downloading again.
     static func keepsDownload(_ s: Settings) -> Bool { s.download.keepDownload && s.converts }
@@ -311,7 +429,7 @@ final class JobQueue: ObservableObject {
     static func discardWork(for job: Job) {
         let fm = FileManager.default
         let work = work(for: job)
-        guard keepsDownload(job.settings) else {
+        guard keepsDownload(job.settings), !job.guide else {
             try? fm.removeItem(at: work)
             return
         }

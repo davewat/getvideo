@@ -80,6 +80,7 @@ struct NoticeBanner: View {
 /// The GetVideo page: a link box and one button, running with the saved defaults.
 struct EasyView: View {
     @EnvironmentObject private var settings: SettingsStore
+    @EnvironmentObject private var form: LinkForm
     @Binding var expanded: Set<UUID>
     let changeSettings: () -> Void
 
@@ -89,7 +90,7 @@ struct EasyView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     LinkSection()
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
-                        PlanView(settings: settings.saved)
+                        PlanView(settings: settings.saved, guide: form.makeGuide)
                         LinkButton("Change settings", action: changeSettings)
                     }
                     SubmitSection(isEasy: true)
@@ -107,8 +108,18 @@ struct EasyView: View {
 /// What a set of options will do, one phrase per stage.
 struct PlanView: View {
     let settings: Settings
+    /// Show the plan for a guide instead of a download.
+    var guide = false
 
     private var items: [(stage: Stage, text: String)] {
+        if guide {
+            let g = settings.guide
+            var items: [(Stage, String)] = [(.captions, "from the video"), (.write, "\(g.style) guide, \(g.effectiveModel)")]
+            if g.effectiveShots > 0 { items.append((.shots, "up to \(g.effectiveShots)")) }
+            items.append((.render, g.dark ? "dark PDF" : "light PDF"))
+            items.append((.save, settings.output.dir.isEmpty ? "~/Downloads" : settings.output.dir))
+            return items
+        }
         let d = settings.download
         let t = settings.transcode
         var items: [(Stage, String)] = [

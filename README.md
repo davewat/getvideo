@@ -48,6 +48,15 @@ or shortens it using the Convert settings. The result is saved in your working f
 it: a length (such as `3:00:00` out of a 12-hour video) or a percentage, taken from the first part,
 the last part or the middle.
 
+**Make a guide (Mac app).** Turn on **Make a guide** under the link box and GetVideo writes a PDF
+reference guide instead of downloading the video: a short summary, headings, the key points
+rewritten as prose, screenshots from the video, and timecodes that link to that moment on YouTube.
+It needs a video with captions. Under **Advanced → Guide**, choose the style (full, summary, notes
+or tutorial), light or dark, larger text, and the provider: Anthropic, or any OpenAI-compatible
+service (OpenAI, OpenRouter, or a local Ollama or LM Studio, which needs no key). Your API key is
+kept in the Mac Keychain. The video's captions are sent to the provider you choose; nothing else
+leaves your Mac. The guide is saved in your working folder as "title (guide).pdf".
+
 **If a conversion fails.** By default GetVideo keeps the downloaded file in the hidden folder
 until the conversion succeeds, and remembers it. Press **Try again** and it carries on from the
 conversion instead of downloading again. Removing the job deletes the kept file. You can turn this
@@ -63,7 +72,7 @@ versions need one manual download.
 
 On first start GetVideo downloads the tools it needs (yt-dlp, HandBrakeCLI and ffmpeg) into its
 own folder and keeps them up to date. It runs entirely on your Mac: no account, no upload, no
-tracking.
+tracking. (The one exception is a guide, which sends the video's captions to the AI provider you pick.)
 
 ## Install
 

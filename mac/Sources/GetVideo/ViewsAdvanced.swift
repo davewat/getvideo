@@ -54,6 +54,7 @@ struct AdvancedForm: View {
             VStack(alignment: .leading, spacing: 0) {
                 section(.download, tool: "yt-dlp") { download }
                 section(.convert, tool: "HandBrake") { convert }
+                section(.write, tool: "AI provider", title: "Guide") { guide }
                 section(.save, tool: "on this Mac", last: true) { save }
             }
             defaultsBar
@@ -64,15 +65,17 @@ struct AdvancedForm: View {
 
     // MARK: Sections
 
-    private func section<Content: View>(_ stage: Stage, tool: String, last: Bool = false, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+    private func section<Content: View>(_ stage: Stage, tool: String, title: String? = nil, last: Bool = false,
+                                        @ViewBuilder content: () -> Content) -> some View {
+        let name = title ?? stage.label
+        return VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center, spacing: 9) {
                 Swatch(stage: stage)
-                SlateText(stage.label)
+                SlateText(name)
                 Text(tool).font(.timecode()).foregroundStyle(Color.soft)
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(stage.label) (\(tool))")
+            .accessibilityLabel("\(name) (\(tool))")
             .accessibilityAddTraits(.isHeader)
             content()
         }
@@ -251,6 +254,28 @@ struct AdvancedForm: View {
         }
     }
 
+    /// The "Make a guide" options: what to write and which AI service writes it.
+    @ViewBuilder private var guide: some View {
+        let o = $settings.draft.guide
+        let g = settings.draft.guide
+        Text("Used when Make a guide is on. The video's captions are sent to the AI service you choose.").hint()
+        inputs {
+            SelectField("Style", selection: o.style, options: [
+                ("full", "Full guide"), ("summary", "Summary"), ("notes", "Study notes"), ("tutorial", "Step-by-step tutorial"),
+            ])
+            SelectField("AI provider", selection: o.provider,
+                        options: [("anthropic", "Anthropic"), ("openai-compatible", "OpenAI or compatible")])
+            TextBox("Model", text: o.model, placeholder: g.effectiveModel)
+            TextBox("Base URL", text: o.baseURL, placeholder: g.effectiveBaseURL)
+            NumberBox("Most screenshots", value: o.maxShots)
+        }
+        GuideKeyField(provider: g.provider)
+        switches {
+            SwitchRow("Dark PDF", isOn: o.dark)
+            SwitchRow("Large text", isOn: o.largeText)
+        }
+    }
+
     @ViewBuilder private var save: some View {
         let o = $settings.draft.output
         Field("Working folder") {
@@ -318,4 +343,45 @@ struct AdvancedForm: View {
     }
 
     private func same(_ values: [String]) -> [(String, String)] { values.map { ($0, $0) } }
+}
+
+/// The API key box. The key goes to the Keychain when saved and is never kept in the settings.
+struct GuideKeyField: View {
+    let provider: String
+    @State private var key = ""
+    @State private var saved = false
+    @State private var error: String?
+
+    var body: some View {
+        Field("API key") {
+            HStack(spacing: 8) {
+                SecureField("", text: $key, prompt: Text(saved ? "Saved in the Keychain" : "Paste your API key"))
+                    .textFieldStyle(.roundedBorder)
+                    .autocorrectionDisabled()
+                    .accessibilityLabel("API key")
+                    .onSubmit(save)
+                Button("Save key", action: save).disabled(key.trimmingCharacters(in: .whitespaces).isEmpty)
+                if saved { Button("Remove") { store("") } }
+            }
+        }
+        .onAppear { saved = Keychain.get(provider) != nil }
+        .onChange(of: provider) { _, new in
+            key = ""
+            saved = Keychain.get(new) != nil
+        }
+        if let error { Text(error).font(.system(size: 13)).foregroundStyle(Color.barRed) }
+    }
+
+    private func save() { store(key) }
+
+    private func store(_ value: String) {
+        do {
+            try Keychain.set(value, for: provider)
+            error = nil
+            key = ""
+            saved = Keychain.get(provider) != nil
+        } catch {
+            self.error = userMessage(error)
+        }
+    }
 }

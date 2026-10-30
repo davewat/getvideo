@@ -9,6 +9,8 @@ final class LinkForm: ObservableObject {
     @Published var text = ""
     /// A file on this computer chosen to be edited by HandBrake, or "".
     @Published var file = ""
+    /// Make a PDF guide from each video's captions instead of downloading it.
+    @Published var makeGuide = false
     /// "Not added: ..." or "Defaults not saved: ...", shown above the primary button.
     @Published var error: String?
 
@@ -43,6 +45,11 @@ struct LinkSection: View {
                 .background(Color.well, in: RoundedRectangle(cornerRadius: 8))
                 .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.line, lineWidth: 1))
             Text("Paste one link, or several on separate lines.").hint()
+            SwitchRow("Make a guide (a PDF written from the video's captions)", isOn: $form.makeGuide)
+                .padding(.top, 4)
+            if form.makeGuide {
+                Text("An AI model reads the captions and writes the guide, with screenshots. Needs your API key: see Advanced > Guide.").hint()
+            }
             fileRow
         }
     }
@@ -157,7 +164,7 @@ struct SubmitSection: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
             }
-            Button(tools.ready ? (isEasy ? "Get video" : "Add to queue") : "Getting ready…", action: submit)
+            Button(tools.ready ? (form.makeGuide ? "Make guide" : isEasy ? "Get video" : "Add to queue") : "Getting ready…", action: submit)
                 .buttonStyle(PrimaryButtonStyle())
                 .keyboardShortcut(.return, modifiers: .command)
                 .disabled(!tools.ready) // held until every tool is present
@@ -171,8 +178,15 @@ struct SubmitSection: View {
         do {
             // Easy mode never sends unsaved Advanced edits.
             let chosen = isEasy ? settings.saved : settings.draft
+            if form.makeGuide, !form.file.isEmpty {
+                throw JobError(message: "A guide is made from a video link, not a file. Clear the chosen file or turn off Make a guide.")
+            }
             if !urls.isEmpty {
-                try queue.add(urls: urls, settings: chosen)
+                if form.makeGuide {
+                    try queue.addGuide(urls: urls, settings: chosen)
+                } else {
+                    try queue.add(urls: urls, settings: chosen)
+                }
                 form.text = "" // queued; a problem with the file below must not queue these twice
             }
             if !form.file.isEmpty {
