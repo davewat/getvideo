@@ -80,7 +80,6 @@ struct NoticeBanner: View {
 /// The GetVideo page: a link box and one button, running with the saved defaults.
 struct EasyView: View {
     @EnvironmentObject private var settings: SettingsStore
-    @EnvironmentObject private var form: LinkForm
     @Binding var expanded: Set<UUID>
     let changeSettings: () -> Void
 
@@ -90,7 +89,7 @@ struct EasyView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     LinkSection()
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
-                        PlanView(settings: settings.saved, guide: form.makeGuide)
+                        PlanView(settings: settings.saved)
                         LinkButton("Change settings", action: changeSettings)
                     }
                     SubmitSection(isEasy: true)

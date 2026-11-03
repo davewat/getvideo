@@ -115,8 +115,8 @@ final class JobQueue: ObservableObject {
         }
         try Args.guide(settings.guide)
         guard guide.apiKey(settings.guide.provider) != nil || settings.guide.isLocal else {
-            let who = settings.guide.provider == "anthropic" ? "Anthropic" : "AI service"
-            throw JobError(message: "A guide needs an API key. Paste your \(who) key in Advanced > Guide first.")
+            let who = GuideProvider.named(settings.guide.provider).title
+            throw JobError(message: "A guide needs an API key. Paste your \(who) key in Advanced > PDF Guides first.")
         }
         for url in cleaned {
             var job = Job(url: url, title: url, settings: settings)
@@ -363,7 +363,7 @@ final class JobQueue: ObservableObject {
         // The model writes the guide
         setStage(id, .writing, percent: 0)
         guard let key = guide.apiKey(g.provider) ?? (g.isLocal ? "" : nil) else {
-            throw JobError(message: "No API key is set. Paste your key in Advanced > Guide, then try again.")
+            throw JobError(message: "No API key is set. Paste your key in Advanced > PDF Guides, then try again.")
         }
         note(id, "Asking \(g.effectiveModel) to write the guide from \(cues.count) lines of captions. This takes a minute or two.")
         let reply = try await guide.client(g, key).complete(

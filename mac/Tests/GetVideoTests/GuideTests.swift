@@ -526,3 +526,91 @@ final class GuidePDFTests: XCTestCase {
         print("PDF bytes: \(data.count) at \(url.path)")
     }
 }
+
+final class ModelListTests: XCTestCase {
+    func testAnthropicRequestUsesTheKeyHeader() throws {
+        var o = GuideOptions(); o.provider = "anthropic"
+        let r = try ModelList.request(for: o, apiKey: "k")
+        XCTAssertEqual(r.url?.path, "/v1/models")
+        XCTAssertEqual(r.value(forHTTPHeaderField: "x-api-key"), "k")
+        XCTAssertNotNil(r.value(forHTTPHeaderField: "anthropic-version"))
+    }
+
+    func testOpenAIRequestUsesBearerAndSkipsItWithoutKey() throws {
+        var o = GuideOptions(); o.provider = "openai-compatible"; o.baseURL = "http://localhost:11434/v1"
+        XCTAssertEqual(try ModelList.request(for: o, apiKey: "k").value(forHTTPHeaderField: "Authorization"), "Bearer k")
+        let r = try ModelList.request(for: o, apiKey: "")
+        XCTAssertEqual(r.url?.absoluteString, "http://localhost:11434/v1/models")
+        XCTAssertNil(r.value(forHTTPHeaderField: "Authorization"))
+    }
+
+    func testRefusesANonWebBaseURL() {
+        var o = GuideOptions(); o.provider = "openai-compatible"; o.baseURL = "file:///etc"
+        XCTAssertThrowsError(try ModelList.request(for: o, apiKey: "k"))
+    }
+
+    func testIdsKeepOrderDropDuplicatesAndNonChatModels() {
+        let json = #"{"data":[{"id":"b-new"},{"id":"text-embedding-3"},{"id":"a-old"},{"id":"b-new"},{"id":"whisper-1"}]}"#
+        XCTAssertEqual(ModelList.ids(from: Data(json.utf8)), ["b-new", "a-old"])
+        XCTAssertEqual(ModelList.ids(from: Data("nope".utf8)), [])
+    }
+
+    func testFetchReadsTheReply() async throws {
+        StubProtocol.handler = { _ in (200, [:], Data(#"{"data":[{"id":"m1"},{"id":"m2"}]}"#.utf8)) }
+        let c = URLSessionConfiguration.ephemeral
+        c.protocolClasses = [StubProtocol.self]
+        let ids = try await ModelList.fetch(GuideOptions(), apiKey: "k", session: URLSession(configuration: c))
+        XCTAssertEqual(ids.map(\.id), ["m1", "m2"])
+    }
+}
+
+final class GuideProviderTests: XCTestCase {
+    func testEveryProviderHasAWebAddressAndAModel() {
+        XCTAssertEqual(Set(GuideProvider.all.map(\.id)).count, GuideProvider.all.count)
+        for p in GuideProvider.all {
+            XCTAssertTrue(p.baseURL.hasPrefix("https://"), p.id)
+            XCTAssertFalse(p.defaultModel.isEmpty, p.id)
+            XCTAssertTrue(GuideOptions.providers.contains(p.id))
+        }
+    }
+
+    func testEmptyBaseURLAndModelFollowTheProvider() {
+        var o = GuideOptions(); o.provider = "gemini"
+        XCTAssertEqual(o.effectiveBaseURL, "https://generativelanguage.googleapis.com/v1beta/openai")
+        XCTAssertEqual(o.effectiveModel, "gemini-2.5-flash")
+        o.provider = "nim"; o.baseURL = "https://example.test/v1/"
+        XCTAssertEqual(o.effectiveBaseURL, "https://example.test/v1")
+    }
+
+    func testOnlyAnthropicUsesTheMessagesAPI() {
+        var o = GuideOptions()
+        XCTAssertTrue(o.makeClient(apiKey: "k") is AnthropicClient)
+        for id in ["openai", "gemini", "openrouter", "nim", "opencode", "openai-compatible"] {
+            o.provider = id
+            XCTAssertTrue(o.makeClient(apiKey: "k") is OpenAICompatClient, id)
+        }
+    }
+
+    func testGeminiModelIdsLoseTheirPrefix() {
+        XCTAssertEqual(ModelList.ids(from: Data(#"{"data":[{"id":"models/gemini-2.5-flash"}]}"#.utf8)), ["gemini-2.5-flash"])
+    }
+}
+
+final class FreeModelTests: XCTestCase {
+    func testFreeIsReadFromPricesAndFreeEndings() {
+        let json = #"""
+        {"data":[{"id":"a/paid","pricing":{"prompt":"0.000001","completion":"0.000002"}},
+                 {"id":"b/gratis","pricing":{"prompt":"0","completion":"0"}},
+                 {"id":"c/x:free"},{"id":"d-free"},{"id":"plain"}]}
+        """#
+        let e = ModelList.entries(from: Data(json.utf8))
+        XCTAssertEqual(e.map(\.free), [false, true, true, true, false])
+    }
+
+    func testFreeOnlyIsOnByDefaultAndOldSettingsKeepIt() throws {
+        XCTAssertTrue(GuideOptions().freeOnly)
+        let o = try JSONDecoder().decode(GuideOptions.self, from: Data(#"{"style":"notes"}"#.utf8))
+        XCTAssertTrue(o.freeOnly)
+        XCTAssertFalse(try JSONDecoder().decode(GuideOptions.self, from: Data(#"{"freeOnly":false}"#.utf8)).freeOnly)
+    }
+}

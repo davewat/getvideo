@@ -46,7 +46,7 @@ enum LLMHTTP {
                 try await Task.sleep(nanoseconds: UInt64(min(seconds, 30) * 1_000_000_000))
                 attempt += 1
             case 401, 403:
-                throw LLMError(message: "\(provider) rejected the API key (error \(http.statusCode)). Check the key in Advanced > Guide. \(detail(data))")
+                throw LLMError(message: "\(provider) rejected the API key (error \(http.statusCode)). Check the key in Advanced > PDF Guides. \(detail(data))")
             case 429:
                 throw LLMError(message: "\(provider) is rate limiting requests (error 429). Try again in a minute. \(detail(data))")
             default:

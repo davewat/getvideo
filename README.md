@@ -48,12 +48,14 @@ or shortens it using the Convert settings. The result is saved in your working f
 it: a length (such as `3:00:00` out of a 12-hour video) or a percentage, taken from the first part,
 the last part or the middle.
 
-**Make a guide (Mac app).** Turn on **Make a guide** under the link box and GetVideo writes a PDF
-reference guide instead of downloading the video: a short summary, headings, the key points
+**GetPDF (Mac app).** Choose **GetPDF** in the sidebar, paste a link and press **Make PDF**, and
+GetVideo writes a PDF reference guide instead of downloading the video: a short summary, headings, the key points
 rewritten as prose, screenshots from the video, and timecodes that link to that moment on YouTube.
-It needs a video with captions. Under **Advanced → Guide**, choose the style (full, summary, notes
-or tutorial), light or dark, larger text, and the provider: Anthropic, or any OpenAI-compatible
-service (OpenAI, OpenRouter, or a local Ollama or LM Studio, which needs no key). Your API key is
+It needs a video with captions. Under **Advanced → PDF Guides**, choose the style (full, summary, notes
+or tutorial), light or dark, larger text, and the provider: Anthropic, OpenAI, Gemini, OpenRouter,
+Nvidia NIM, OpenCode Zen, or any other OpenAI-compatible service (such as a local Ollama or LM Studio,
+which needs no key). Choosing a provider fills in its address, and once your key is saved the Model
+menu lists what that key can use. Your API key is
 kept in the Mac Keychain. The video's captions are sent to the provider you choose; nothing else
 leaves your Mac. The guide is saved in your working folder as "title (guide).pdf".
 

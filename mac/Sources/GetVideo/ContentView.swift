@@ -2,13 +2,14 @@ import SwiftUI
 
 /// The pages in the sidebar.
 enum Pane: String, CaseIterable, Identifiable {
-    case getVideo, advanced, about
+    case getVideo, getPDF, advanced, about
 
     var id: Self { self }
 
     var title: String {
         switch self {
         case .getVideo: "GetVideo"
+        case .getPDF: "GetPDF"
         case .advanced: "Advanced"
         case .about: "About"
         }
@@ -17,6 +18,7 @@ enum Pane: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .getVideo: "play.rectangle"
+        case .getPDF: "doc.richtext"
         case .advanced: "slider.horizontal.3"
         case .about: "info.circle"
         }
@@ -46,15 +48,16 @@ struct ContentView: View {
             // Rows are identified by the Pane itself, which is what the selection holds.
             List(Pane.allCases, selection: selection) { p in
                 Label(p.title, systemImage: p.symbol)
-                    .badge(p == .getVideo ? activeJobs : p == .advanced ? toolProblems : 0)
+                    .badge(p == .getVideo || p == .getPDF ? activeJobs : p == .advanced ? toolProblems : 0)
             }
             .navigationSplitViewColumnWidth(min: 160, ideal: 190, max: 260)
         } detail: {
             VStack(spacing: 0) {
-                UpdateBanner(isEasy: pane == .getVideo)
-                if pane != .about { NoticeBanner(isEasy: pane == .getVideo) }
+                UpdateBanner(isEasy: pane == .getVideo || pane == .getPDF)
+                if pane != .about { NoticeBanner(isEasy: pane == .getVideo || pane == .getPDF) }
                 switch pane {
                 case .getVideo: EasyView(expanded: $expanded) { pane = .advanced }
+                case .getPDF: PDFView(expanded: $expanded) { pane = .advanced }
                 case .advanced: AdvancedView(expanded: $expanded)
                 case .about: AboutPane()
                 }

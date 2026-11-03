@@ -138,25 +138,26 @@ extension OutputOptions {
 /// in the Keychain (Keychain.swift) and is never written to the settings or the job history.
 struct GuideOptions: Codable, Equatable {
     static let styles = ["full", "summary", "notes", "tutorial"]
-    static let providers = ["anthropic", "openai-compatible"]
+    static let providers = GuideProvider.all.map(\.id)
     static let maxScreenshots = 30
 
     var style = "full"            // full, summary (at most 3 screenshots), notes, tutorial
     var dark = false
     var largeText = false
-    var provider = "anthropic"    // anthropic, openai-compatible
+    var provider = "anthropic"    // a GuideProvider id
     var model = ""                // "" = the provider's default
     var baseURL = ""              // "" = the provider's default
     var maxShots = 20             // most screenshots in the guide
+    var freeOnly = true           // the Model menu lists only free models, where the service says which are free
 
     var effectiveModel: String {
         let m = model.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !m.isEmpty ? m : provider == "anthropic" ? "claude-sonnet-5-5" : "gpt-4o-mini"
+        return !m.isEmpty ? m : GuideProvider.named(provider).defaultModel
     }
 
     var effectiveBaseURL: String {
         let u = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        let url = !u.isEmpty ? u : provider == "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1"
+        let url = !u.isEmpty ? u : GuideProvider.named(provider).baseURL
         return url.hasSuffix("/") ? String(url.dropLast()) : url
     }
 
@@ -185,6 +186,7 @@ extension GuideOptions {
         try c.update(&model, .model)
         try c.update(&baseURL, .baseURL)
         try c.update(&maxShots, .maxShots)
+        try c.update(&freeOnly, .freeOnly)
     }
 }
 
