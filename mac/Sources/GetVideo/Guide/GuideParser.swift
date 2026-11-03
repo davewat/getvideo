@@ -35,7 +35,7 @@ enum GuideParser {
                 text = parts.dropFirst().joined(separator: "\n\n")
             }
         }
-        let limit = duration > 0 ? Int(duration) : Int.max
+        let limit = duration > 0 ? duration.rounded(.down).clampedInt : Int.max
         var lines: [String] = []
         for line in text.components(separatedBy: "\n") {
             let ns = line as NSString

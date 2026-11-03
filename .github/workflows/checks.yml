@@ -1,0 +1,98 @@
+name: Checks
+
+# Swift checks, a fuzzing run and vulnerability scans. Everything runs here; there is no local script.
+# Every pull request and push to main is checked, and a longer fuzz run plus the scans repeat every
+# Monday, because new vulnerabilities are published against code that has not changed.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+    inputs:
+      fuzz_iterations:
+        description: "Inputs each fuzz test tries"
+        default: "50000"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  swift:
+    name: Swift build and tests
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show the toolchain
+        run: swift --version
+      # A warning is a failure, in the app and in the tests.
+      - name: Build (debug, warnings are errors)
+        working-directory: mac
+        run: swift build --build-tests -Xswiftc -warnings-as-errors
+      - name: Build (release, warnings are errors)
+        working-directory: mac
+        run: swift build -c release -Xswiftc -warnings-as-errors
+      # Includes the fuzz tests at their default size and the guard that a dependency must be pinned.
+      - name: Test
+        working-directory: mac
+        run: swift test
+
+  fuzz:
+    name: Fuzz the parsers
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      # A fresh random seed each time. A failure prints "replay with GETVIDEO_FUZZ_SEED=<n>"; run the
+      # same command with that seed (and the same iteration count) to get the same inputs.
+      - name: Fuzz
+        working-directory: mac
+        env:
+          GETVIDEO_FUZZ_ITERATIONS: ${{ github.event.inputs.fuzz_iterations || (github.event_name == 'schedule' && '50000') || '5000' }}
+        run: swift test --filter FuzzTests
+
+  go:
+    name: Go vet and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test ./...
+
+  vulnerabilities:
+    name: Vulnerability scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      # Go: known vulnerabilities in the standard library the build uses and in any module, checked
+      # for the three systems the Go version is built for. Only calls that are reachable count.
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          for os in darwin linux windows; do
+            echo "== $os"
+            GOOS=$os govulncheck ./...
+          done
+      # Every manifest in the repo against the OSV database. Today go.mod and Package.swift list no
+      # dependencies, so there is nothing to find; this starts working the day one is added (a
+      # Package.resolved is then required, and a test checks that). Exit 128 means "nothing to scan".
+      - name: OSV-Scanner
+        run: |
+          go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest
+          status=0
+          osv-scanner scan source --recursive . || status=$?
+          if [ "$status" -ne 0 ] && [ "$status" -ne 128 ]; then exit "$status"; fi

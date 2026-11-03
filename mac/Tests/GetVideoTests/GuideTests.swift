@@ -614,3 +614,14 @@ final class FreeModelTests: XCTestCase {
         XCTAssertFalse(try JSONDecoder().decode(GuideOptions.self, from: Data(#"{"freeOnly":false}"#.utf8)).freeOnly)
     }
 }
+
+final class EscapeRegressionTests: XCTestCase {
+    func testAStarInALinkAddressStaysOutOfTheHref() {
+        XCTAssertEqual(MiniMarkdown.inline("[*a*](https://x.example/*b*)"), "<a href=\"https://x.example/*b*\"><em>a</em></a>")
+    }
+
+    func testAMarkWrittenAfterAnAngleBracketDoesNotHideIt() {
+        // "<" + U+0301 is one Character in Swift, so a per-Character escape let it through.
+        XCTAssertEqual(MiniMarkdown.escape("<\u{0301}b \"\u{0301}"), "&lt;\u{0301}b &quot;\u{0301}")
+    }
+}

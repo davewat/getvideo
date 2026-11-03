@@ -5,19 +5,19 @@ import Foundation
 /// is added, so nothing in the input can become markup.
 enum MiniMarkdown {
     static func escape(_ s: String) -> String {
-        var out = ""
-        out.reserveCapacity(s.count)
-        for c in s {
+        // By scalar, not by Character: "<" followed by a combining mark is one Character that is not "<".
+        var out = String.UnicodeScalarView()
+        for c in s.unicodeScalars {
             switch c {
-            case "&": out += "&amp;"
-            case "<": out += "&lt;"
-            case ">": out += "&gt;"
-            case "\"": out += "&quot;"
-            case "'": out += "&#39;"
+            case "&": out.append(contentsOf: "&amp;".unicodeScalars)
+            case "<": out.append(contentsOf: "&lt;".unicodeScalars)
+            case ">": out.append(contentsOf: "&gt;".unicodeScalars)
+            case "\"": out.append(contentsOf: "&quot;".unicodeScalars)
+            case "'": out.append(contentsOf: "&#39;".unicodeScalars)
             default: out.append(c)
             }
         }
-        return out
+        return String(out)
     }
 
     private static let code = try! NSRegularExpression(pattern: "`([^`\n]+)`")
@@ -54,11 +54,20 @@ enum MiniMarkdown {
 
     /// Escapes first; the patterns then only ever add the fixed tags below.
     private static func styled(_ s: String) -> String {
-        var t = escape(s)
-        t = replace(link, in: t, with: "<a href=\"$2\">$1</a>")
-        t = replace(bold, in: t, with: "<strong>$1</strong>")
-        t = replace(italic, in: t, with: "<em>$1</em>")
-        return t
+        let t = escape(s) as NSString
+        var out = ""
+        var at = 0
+        // Bold and italic stay out of the address: a "*" in a URL must not put tags inside the href.
+        for m in link.matches(in: t as String, range: NSRange(location: 0, length: t.length)) {
+            out += emphasis(t.substring(with: NSRange(location: at, length: m.range.location - at)))
+            out += "<a href=\"" + t.substring(with: m.range(at: 2)) + "\">" + emphasis(t.substring(with: m.range(at: 1))) + "</a>"
+            at = m.range.location + m.range.length
+        }
+        return out + emphasis(t.substring(from: at))
+    }
+
+    private static func emphasis(_ s: String) -> String {
+        replace(italic, in: replace(bold, in: s, with: "<strong>$1</strong>"), with: "<em>$1</em>")
     }
 
     static func render(_ markdown: String) -> String {
