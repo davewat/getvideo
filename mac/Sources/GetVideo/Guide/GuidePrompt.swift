@@ -47,7 +47,7 @@ enum GuidePrompt {
             .replacingOccurrences(of: "</transcript>", with: "[/transcript]")
         var head = "Video: \(oneLine(title))"
         if !channel.isEmpty { head += "\nChannel: \(oneLine(channel))" }
-        if duration > 0 { head += "\nLength: \(Int(duration)) seconds" }
+        if duration > 0 { head += "\nLength: \(duration.rounded(.down).clampedInt) seconds" }
         return "<video>\n\(head)\n\n<transcript>\n\(safe)\n</transcript>\n</video>"
     }
 

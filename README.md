@@ -163,6 +163,24 @@ on macOS, `%AppData%\GetVideo` on Windows, `~/.local/share/getvideo` on Linux).
 - `web/js/schema.js` defines the form fields and defaults; add an option there.
 - The website lives on the `web` branch.
 
+### Checks
+
+GitHub Actions (`.github/workflows/checks.yml`) runs on every pull request, on pushes to main and
+every Monday:
+
+- **Swift:** the Mac app and its tests build with warnings treated as errors, in debug and release,
+  then `swift test` runs.
+- **Fuzzing:** the tests in `mac/Tests/GetVideoTests/FuzzTests.swift` feed random and mangled input
+  to the parsers (captions, the model's reply, Markdown, model lists, yt-dlp and HandBrake output,
+  file names) and check they never crash and keep their promises (for example, never writing a tag
+  into the guide's HTML). A failure prints `GETVIDEO_FUZZ_SEED=<n>`; run
+  `GETVIDEO_FUZZ_SEED=<n> swift test --filter FuzzTests` in `mac/` to replay it.
+- **Go:** `go vet` and `go test`.
+- **Vulnerabilities:** `govulncheck` for the Go code and standard library on macOS, Linux and
+  Windows, and OSV-Scanner for every dependency manifest. Neither the Swift package nor the Go
+  module has third-party dependencies today; if one is added, commit `Package.resolved` (a test
+  fails otherwise) so the scanner can see which version is used.
+
 ### Native Mac app
 
 `mac/` holds a native SwiftUI version that works the same way, with no browser or Terminal. It

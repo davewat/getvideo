@@ -32,7 +32,7 @@ enum Trim {
 
     /// Seconds as H:MM:SS.
     static func clockString(_ seconds: Double) -> String {
-        let s = Int(seconds.rounded())
+        let s = seconds.clampedInt
         return String(format: "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60)
     }
 

@@ -129,3 +129,9 @@ enum Parsing {
         return parts[parts.count - 2]
     }
 }
+
+extension Double {
+    /// The nearest whole number, for a value that came from outside the app: NaN is 0 and anything
+    /// beyond a billion is held there, so the conversion cannot trap.
+    var clampedInt: Int { isNaN ? 0 : Int(min(max(rounded(), -1e9), 1e9)) }
+}

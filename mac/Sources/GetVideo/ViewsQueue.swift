@@ -143,7 +143,7 @@ struct Timeline: View {
 
     private var accessibilityValue: String {
         switch job.status {
-        case .downloading where !job.guide, .converting, .capturing: "\(job.status.label(guide: job.guide)), \(Int(job.percent.rounded())) percent"
+        case .downloading where !job.guide, .converting, .capturing: "\(job.status.label(guide: job.guide)), \(job.percent.clampedInt) percent"
         default: job.status.label(guide: job.guide)
         }
     }
