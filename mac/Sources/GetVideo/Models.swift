@@ -134,24 +134,106 @@ extension OutputOptions {
     }
 }
 
+/// How a guide (a PDF written from a video's captions) is made. The API key is not here: it lives
+/// in the Keychain (Keychain.swift) and is never written to the settings or the job history.
+struct GuideOptions: Codable, Equatable {
+    static let styles = ["full", "summary", "notes", "tutorial"]
+    static let providers = GuideProvider.all.map(\.id)
+    static let maxScreenshots = 30
+
+    var style = "full"            // full, summary (at most 3 screenshots), notes, tutorial
+    var dark = false
+    var largeText = false
+    var provider = "anthropic"    // a GuideProvider id
+    var model = ""                // "" = the provider's default
+    var baseURL = ""              // "" = the provider's default
+    var maxShots = 20             // most screenshots in the guide
+    var freeOnly = true           // the Model menu lists only free models, where the service says which are free
+
+    var effectiveModel: String {
+        let m = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !m.isEmpty ? m : GuideProvider.named(provider).defaultModel
+    }
+
+    var effectiveBaseURL: String {
+        let u = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let url = !u.isEmpty ? u : GuideProvider.named(provider).baseURL
+        return url.hasSuffix("/") ? String(url.dropLast()) : url
+    }
+
+    /// The screenshots this guide may hold: the summary style keeps it to three.
+    var effectiveShots: Int {
+        let n = min(max(maxShots, 0), Self.maxScreenshots)
+        return style == "summary" ? min(n, 3) : n
+    }
+
+    /// True when the base URL points at this computer, where a local model needs no API key.
+    var isLocal: Bool {
+        guard let host = URL(string: effectiveBaseURL)?.host?.lowercased() else { return false }
+        return host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]"
+    }
+}
+
+/// Reads files saved by earlier versions: anything missing keeps its default.
+extension GuideOptions {
+    init(from decoder: Decoder) throws {
+        self.init()
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        try c.update(&style, .style)
+        try c.update(&dark, .dark)
+        try c.update(&largeText, .largeText)
+        try c.update(&provider, .provider)
+        try c.update(&model, .model)
+        try c.update(&baseURL, .baseURL)
+        try c.update(&maxShots, .maxShots)
+        try c.update(&freeOnly, .freeOnly)
+    }
+}
+
 /// One complete set of options: what a job runs with, and what "Save as default" stores.
 struct Settings: Codable, Equatable {
     var download = DownloadOptions()
     var transcode = TranscodeOptions()
     var output = OutputOptions()
+    var guide = GuideOptions()
 
     /// True when this set of options runs the Convert stage.
     var converts: Bool { !download.audioOnly && !transcode.skip }
 }
 
-enum JobStatus: String, Codable {
-    case queued, downloading, converting, saving, done, failed, canceled
+/// Reads files saved by earlier versions: anything missing keeps its default.
+extension Settings {
+    init(from decoder: Decoder) throws {
+        self.init()
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        try c.update(&download, .download)
+        try c.update(&transcode, .transcode)
+        try c.update(&output, .output)
+        try c.update(&guide, .guide)
+    }
+}
 
-    var isActive: Bool { self == .queued || self == .downloading || self == .converting || self == .saving }
+enum JobStatus: String, Codable {
+    // writing, capturing and rendering are the guide stages; a guide's captions are fetched while "downloading"
+    case queued, downloading, converting, saving, done, failed, canceled, writing, capturing, rendering
+
+    var isActive: Bool { self == .queued || self == .downloading || self == .converting || self == .saving || inGuide }
+
+    /// A stage only a guide job goes through.
+    var inGuide: Bool { self == .writing || self == .capturing || self == .rendering }
+
+    /// What to call the stage for a guide job, whose "downloading" is getting the captions.
+    func label(guide: Bool) -> String {
+        guard guide else { return label }
+        return self == .downloading ? "Getting captions" : label
+    }
 
     var label: String {
         switch self {
         case .queued: "Waiting"
+        case .writing: "Writing"
+        case .capturing: "Screenshots"
+        case .rendering: "Rendering"
         case .downloading: "Downloading"
         case .converting: "Converting"
         case .saving: "Saving"
@@ -167,6 +249,7 @@ struct Job: Identifiable, Codable, Equatable {
     var id = UUID()
     var url: String               // empty for a file edited on this computer
     var source = ""              // a file on this computer to edit with HandBrake, instead of a download
+    var guide = false             // make a PDF guide from the video's captions instead of downloading it
     var title: String             // the URL until yt-dlp reports the real title
     var status: JobStatus = .queued
     var percent = 0.0             // progress of the current stage, 0...100
@@ -196,6 +279,7 @@ extension Job {
         try c.update(&outputs, .outputs)
         try c.update(&downloads, .downloads)
         try c.update(&source, .source)
+        try c.update(&guide, .guide)
         try c.update(&log, .log)
         try c.update(&created, .created)
     }

@@ -30,7 +30,7 @@ if [ "${1:-universal}" = native ]; then
 else
 	echo "==> building arm64 + x86_64"
 	swift build -c release --arch arm64 --arch x86_64 --package-path mac
-	BIN=mac/.build/apple/Products/Release/GetVideo
+	BIN=$(swift build -c release --arch arm64 --arch x86_64 --package-path mac --show-bin-path)/GetVideo
 fi
 test -x "$BIN" || { echo "no executable at $BIN" >&2; exit 1; }
 

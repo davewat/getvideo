@@ -38,6 +38,7 @@ struct AdvancedForm: View {
     @Binding var moreDownload: Bool
     @Binding var moreConvert: Bool
     @State private var confirmReset = false
+    @State private var keyRevision = 0
 
     // Inputs flow into as many columns as fit; switches use the same columns, packed tighter.
     private let columns = [GridItem(.adaptive(minimum: 190), spacing: 16, alignment: .top)]
@@ -54,6 +55,7 @@ struct AdvancedForm: View {
             VStack(alignment: .leading, spacing: 0) {
                 section(.download, tool: "yt-dlp") { download }
                 section(.convert, tool: "HandBrake") { convert }
+                section(.write, tool: "AI provider", title: "PDF Guides") { guide }
                 section(.save, tool: "on this Mac", last: true) { save }
             }
             defaultsBar
@@ -64,15 +66,17 @@ struct AdvancedForm: View {
 
     // MARK: Sections
 
-    private func section<Content: View>(_ stage: Stage, tool: String, last: Bool = false, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+    private func section<Content: View>(_ stage: Stage, tool: String, title: String? = nil, last: Bool = false,
+                                        @ViewBuilder content: () -> Content) -> some View {
+        let name = title ?? stage.label
+        return VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center, spacing: 9) {
                 Swatch(stage: stage)
-                SlateText(stage.label)
+                SlateText(name)
                 Text(tool).font(.timecode()).foregroundStyle(Color.soft)
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("\(stage.label) (\(tool))")
+            .accessibilityLabel("\(name) (\(tool))")
             .accessibilityAddTraits(.isHeader)
             content()
         }
@@ -251,6 +255,32 @@ struct AdvancedForm: View {
         }
     }
 
+    /// The "Make a guide" options: what to write and which AI service writes it.
+    @ViewBuilder private var guide: some View {
+        let o = $settings.draft.guide
+        let g = settings.draft.guide
+        Text("Used by GetPDF. The video's captions are sent to the AI service you choose.").hint()
+        inputs {
+            SelectField("Style", selection: o.style, options: [
+                ("full", "Full guide"), ("summary", "Summary"), ("notes", "Study notes"), ("tutorial", "Step-by-step tutorial"),
+            ])
+            SelectField("AI provider", selection: o.provider, options: GuideProvider.all.map { ($0.id, $0.title) })
+            GuideModelField(options: o, keyRevision: keyRevision)
+            TextBox("Base URL", text: o.baseURL, placeholder: g.effectiveBaseURL)
+            NumberBox("Most screenshots", value: o.maxShots)
+        }
+        .onChange(of: g.provider) { _, new in
+            // The old address and model belong to the old service.
+            settings.draft.guide.baseURL = GuideProvider.named(new).baseURL
+            settings.draft.guide.model = ""
+        }
+        GuideKeyField(provider: g.provider, revision: $keyRevision)
+        switches {
+            SwitchRow("Dark PDF", isOn: o.dark)
+            SwitchRow("Large text", isOn: o.largeText)
+        }
+    }
+
     @ViewBuilder private var save: some View {
         let o = $settings.draft.output
         Field("Working folder") {
@@ -318,4 +348,108 @@ struct AdvancedForm: View {
     }
 
     private func same(_ values: [String]) -> [(String, String)] { values.map { ($0, $0) } }
+}
+
+/// The API key box. The key goes to the Keychain when saved and is never kept in the settings.
+struct GuideKeyField: View {
+    let provider: String
+    /// Counts key changes, so the Model box knows to ask for its list again.
+    @Binding var revision: Int
+    @State private var key = ""
+    @State private var saved = false
+    @State private var error: String?
+
+    var body: some View {
+        Field("API key") {
+            HStack(spacing: 8) {
+                SecureField("", text: $key, prompt: Text(saved ? "Saved in the Keychain" : "Paste your API key"))
+                    .textFieldStyle(.roundedBorder)
+                    .autocorrectionDisabled()
+                    .accessibilityLabel("API key")
+                    .onSubmit(save)
+                Button("Save key", action: save).disabled(key.trimmingCharacters(in: .whitespaces).isEmpty)
+                if saved { Button("Remove") { store("") } }
+            }
+        }
+        .onAppear { saved = Keychain.get(provider) != nil }
+        .onChange(of: provider) { _, new in
+            key = ""
+            saved = Keychain.get(new) != nil
+        }
+        if let error { Text(error).font(.system(size: 13)).foregroundStyle(Color.barRed) }
+    }
+
+    private func save() { store(key) }
+
+    private func store(_ value: String) {
+        do {
+            try Keychain.set(value, for: provider)
+            error = nil
+            key = ""
+            saved = Keychain.get(provider) != nil
+            revision += 1
+        } catch {
+            self.error = userMessage(error)
+        }
+    }
+}
+
+/// The Model box. Once there is a key (or a local service) it asks which models are available
+/// and offers them in a menu; anything can still be typed.
+struct GuideModelField: View {
+    @Binding var options: GuideOptions
+    let keyRevision: Int
+    @State private var all: [ModelList.Entry] = []
+    @State private var loading = false
+    @State private var problem: String?
+
+    /// The checkbox only means something when the service marked some models free.
+    private var canFilter: Bool { all.contains(where: \.free) }
+    private var models: [String] { all.filter { !(canFilter && options.freeOnly) || $0.free }.map(\.id) }
+
+    private var task: String { "\(options.provider)|\(options.effectiveBaseURL)|\(keyRevision)" }
+
+    var body: some View {
+        Field("Model") {
+            HStack(spacing: 8) {
+                TextField("", text: $options.model, prompt: Text(options.effectiveModel))
+                    .accessibilityLabel("Model")
+                    .textFieldStyle(.roundedBorder)
+                    .autocorrectionDisabled()
+                if loading {
+                    ProgressView().controlSize(.small)
+                } else if !models.isEmpty {
+                    Menu("Models") {
+                        ForEach(models, id: \.self) { id in Button(id) { options.model = id } }
+                    }
+                    .fixedSize()
+                }
+            }
+            if canFilter { Toggle("Free models only", isOn: $options.freeOnly).toggleStyle(.checkbox) }
+            if let problem { Text(problem).font(.system(size: 12)).foregroundStyle(Color.soft) }
+        }
+        .task(id: task) { await load() }
+    }
+
+    private func load() async {
+        all = []
+        problem = nil
+        let key = Keychain.get(options.provider)
+        guard key != nil || options.isLocal else { return }
+        // Typing in the Base URL box changes the task id on every key; wait for a pause.
+        try? await Task.sleep(nanoseconds: 600_000_000)
+        guard !Task.isCancelled else { return }
+        loading = true
+        defer { loading = false }
+        do {
+            let found = try await ModelList.fetch(options, apiKey: key ?? "")
+            guard !Task.isCancelled else { return }
+            all = found
+            // Fill an empty box only when the default is not on offer.
+            if options.model.isEmpty, let first = models.first, !models.contains(options.effectiveModel) { options.model = first }
+        } catch is CancellationError {
+        } catch {
+            problem = "Could not list models: \(userMessage(error))"
+        }
+    }
 }

@@ -9,16 +9,45 @@ final class LinkForm: ObservableObject {
     @Published var text = ""
     /// A file on this computer chosen to be edited by HandBrake, or "".
     @Published var file = ""
+    /// The GetPDF page's own link box and error line, kept apart from GetVideo's.
+    @Published var pdfText = ""
+    @Published var pdfError: String?
     /// "Not added: ..." or "Defaults not saved: ...", shown above the primary button.
     @Published var error: String?
 
     /// The links in the box: split on any whitespace, empties ignored.
-    var urls: [String] { text.split(whereSeparator: \.isWhitespace).map(String.init) }
+    var urls: [String] { Self.split(text) }
+    var pdfURLs: [String] { Self.split(pdfText) }
+
+    private static func split(_ text: String) -> [String] { text.split(whereSeparator: \.isWhitespace).map(String.init) }
 }
 
 /// The message to show for a thrown error. The core's errors are all `LocalizedError`s whose
 /// description is already written for the user.
 func userMessage(_ error: Error) -> String { error.localizedDescription }
+
+/// The link editor with its placeholder, in a well.
+struct LinkBox: View {
+    @Binding var text: String
+
+    var body: some View {
+        LinkEditor(text: $text)
+            .frame(height: 68)
+            .overlay(alignment: .topLeading) {
+                if text.isEmpty {
+                    Text(verbatim: "https://www.youtube.com/watch?v=…")
+                        .font(.timecode(13))
+                        .foregroundStyle(Color.soft.opacity(0.75))
+                        .padding(.horizontal, LinkEditor.inset.width + 5) // + the text view's own line padding
+                        .padding(.vertical, LinkEditor.inset.height)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
+            .background(Color.well, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.line, lineWidth: 1))
+    }
+}
 
 /// "VIDEO LINK", the editor and its hint.
 struct LinkSection: View {
@@ -27,21 +56,7 @@ struct LinkSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             SlateText("Video link")
-            LinkEditor(text: $form.text)
-                .frame(height: 68)
-                .overlay(alignment: .topLeading) {
-                    if form.text.isEmpty {
-                        Text(verbatim: "https://www.youtube.com/watch?v=…")
-                            .font(.timecode(13))
-                            .foregroundStyle(Color.soft.opacity(0.75))
-                            .padding(.horizontal, LinkEditor.inset.width + 5) // + the text view's own line padding
-                            .padding(.vertical, LinkEditor.inset.height)
-                            .allowsHitTesting(false)
-                            .accessibilityHidden(true)
-                    }
-                }
-                .background(Color.well, in: RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.line, lineWidth: 1))
+            LinkBox(text: $form.text)
             Text("Paste one link, or several on separate lines.").hint()
             fileRow
         }

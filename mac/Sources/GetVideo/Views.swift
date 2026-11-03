@@ -107,8 +107,18 @@ struct EasyView: View {
 /// What a set of options will do, one phrase per stage.
 struct PlanView: View {
     let settings: Settings
+    /// Show the plan for a guide instead of a download.
+    var guide = false
 
     private var items: [(stage: Stage, text: String)] {
+        if guide {
+            let g = settings.guide
+            var items: [(Stage, String)] = [(.captions, "from the video"), (.write, "\(g.style) guide, \(g.effectiveModel)")]
+            if g.effectiveShots > 0 { items.append((.shots, "up to \(g.effectiveShots)")) }
+            items.append((.render, g.dark ? "dark PDF" : "light PDF"))
+            items.append((.save, settings.output.dir.isEmpty ? "~/Downloads" : settings.output.dir))
+            return items
+        }
         let d = settings.download
         let t = settings.transcode
         var items: [(Stage, String)] = [

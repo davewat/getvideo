@@ -85,6 +85,32 @@ enum Args {
         }
     }
 
+    /// yt-dlp arguments that save a video's English captions (json3) into `dir` as `<id>.<lang>.json3`
+    /// and download nothing else. The URL comes last.
+    static func captions(_ url: String, dir: URL) throws -> [String] {
+        guard !url.isEmpty else { throw ArgsError(message: "a link is needed to get captions") }
+        return ["--skip-download", "--write-subs", "--write-auto-subs", "--sub-langs", "en.*,en", "--sub-format", "json3",
+                "--no-playlist", "--no-colors", "--newline", "-P", dir.path, "-o", "%(id)s.%(ext)s", url]
+    }
+
+    /// yt-dlp arguments that print one JSON line about the video (title, length, channel, a stream
+    /// to take screenshots from) without downloading it.
+    static func metadata(_ url: String) throws -> [String] {
+        guard !url.isEmpty else { throw ArgsError(message: "a link is needed to read the video's details") }
+        return ["-j", "--no-playlist", "--no-warnings", "--no-colors", "-f", "bv*[height<=720]/b[height<=720]/bv*/b", url]
+    }
+
+    /// Checks the guide options.
+    static func guide(_ o: GuideOptions) throws {
+        guard GuideOptions.styles.contains(o.style) else { throw ArgsError(message: "unknown guide style \"\(o.style)\"") }
+        guard GuideOptions.providers.contains(o.provider) else { throw ArgsError(message: "unknown AI provider \"\(o.provider)\"") }
+        guard o.maxShots >= 0 else { throw ArgsError(message: "the number of screenshots cannot be negative") }
+        let u = o.effectiveBaseURL
+        guard let url = URL(string: u), ["http", "https"].contains(url.scheme?.lowercased() ?? ""), url.host != nil else {
+            throw ArgsError(message: "the AI base URL \"\(u)\" must start with http:// or https://")
+        }
+    }
+
     /// Shell-style split: whitespace separated, with '...' and "..." quoting.
     static func split(_ s: String) throws -> [String] {
         var out: [String] = []

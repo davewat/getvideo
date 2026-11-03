@@ -40,8 +40,10 @@ struct JobRow: View {
 
     /// "Downloading 42% · 6.1MiB/s · 00:12 left", or just the status for stages without progress.
     private var statusLine: String {
-        guard job.status == .downloading || job.status == .converting else { return job.status.label }
-        return ["\(job.status.label) \(String(format: "%.0f", job.percent))%", job.speed, job.eta.isEmpty ? "" : "\(job.eta) left"]
+        let label = job.status.label(guide: job.guide)
+        let hasProgress = job.guide ? job.status == .capturing : job.status == .downloading || job.status == .converting
+        guard hasProgress else { return label }
+        return ["\(label) \(String(format: "%.0f", job.percent))%", job.speed, job.eta.isEmpty ? "" : "\(job.eta) left"]
             .filter { !$0.isEmpty }
             .joined(separator: " · ")
     }
@@ -111,14 +113,18 @@ struct Timeline: View {
     /// The running stage, if any.
     private var current: Stage? {
         switch job.status {
-        case .downloading: .download
+        case .downloading: job.guide ? .captions : .download
         case .converting: .convert
         case .saving: .save
+        case .writing: .write
+        case .capturing: .shots
+        case .rendering: .render
         default: nil
         }
     }
 
     private var stages: [Stage] {
+        if job.guide { return [.captions, .write, .shots, .render, .save] }
         if !job.source.isEmpty { return [.convert, .save] } // a file on disk is never downloaded
         return job.settings.converts ? [.download, .convert, .save] : [.download, .save]
     }
@@ -126,7 +132,7 @@ struct Timeline: View {
     /// 0...1: full once the stage is behind us, the job's percentage while it runs. Saving has
     /// no progress of its own, so it shows full for as long as it lasts.
     private func fill(_ stage: Stage) -> Double {
-        let order = Stage.allCases
+        let order = stages
         guard let index = order.firstIndex(of: stage) else { return 0 }
         if job.status == .done { return 1 }
         guard let current, let at = order.firstIndex(of: current) else { return 0 }
@@ -137,8 +143,8 @@ struct Timeline: View {
 
     private var accessibilityValue: String {
         switch job.status {
-        case .downloading, .converting: "\(job.status.label), \(Int(job.percent.rounded())) percent"
-        default: job.status.label
+        case .downloading where !job.guide, .converting, .capturing: "\(job.status.label(guide: job.guide)), \(Int(job.percent.rounded())) percent"
+        default: job.status.label(guide: job.guide)
         }
     }
 
